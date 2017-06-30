@@ -56,7 +56,7 @@ def main(lr, batch_size, alpha, beta, image_size, K,
         alpha*model.L_img+beta*model.L_GAN, var_list=model.g_vars
     )
 
-  gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.9)
+  gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=1.0)
   with tf.Session(config=tf.ConfigProto(allow_soft_placement=True,
                   log_device_placement=False,
                   gpu_options=gpu_options)) as sess:
@@ -155,7 +155,7 @@ def main(lr, batch_size, alpha, beta, image_size, K,
               print("Saving sample ...")
               save_images(samples[:,:,:,::-1], [2, T], 
                           samples_dir+"train_%s.png" % (iters))
-            if np.mod(counter, 10) == 2:
+            if np.mod(counter, 500) == 2:
               print("Saving snapshot ...")
               model.save(sess, checkpoint_dir, counter-1)
   
