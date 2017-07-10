@@ -16,21 +16,22 @@ from argparse import ArgumentParser
 from joblib import Parallel, delayed
 
 
-def main(lr, batch_size, alpha, beta, K, T, num_iter, gpu):
-  data_path  = "../data/S1M/"
-  trainfiles = sorted([f for f in listdir(data_path) if f.endswith(".mp4")])
+def main(lr, batch_size, alpha, beta, image_size, K,
+         T, num_iter, gpu):
+  # Load video tensor
+  video_tensor_path = '../data/MNIST/toronto.npy'
+  video_tensor = np.load(video_tensor_path, mmap_mode='r')
   margin = 0.3
   updateD = True
   updateG = True
-  image_size = [240,320]
-  c_dim = 3
-  prefix = ("S1M_MCNET"
-         + "_K="+str(K)
-         + "_T="+str(T)
-         + "_batch_size="+str(batch_size)
-         + "_alpha="+str(alpha)
-         + "_beta="+str(beta)
-         + "_lr="+str(lr))
+  prefix  = ("toronto_MCNET"
+          + "_image_size="+str(image_size)
+          + "_K="+str(K)
+          + "_T="+str(T)
+          + "_batch_size="+str(batch_size)
+          + "_alpha="+str(alpha)
+          + "_beta="+str(beta)
+          + "_lr="+str(lr))
 
   print("\n"+prefix+"\n")
   checkpoint_dir = "../models/"+prefix+"/"
@@ -45,7 +46,7 @@ def main(lr, batch_size, alpha, beta, K, T, num_iter, gpu):
     makedirs(summary_dir)
 
   with tf.device("/gpu:%d"%gpu[0]):
-    model = MCNET(image_size=image_size, c_dim=c_dim,
+    model = MCNET(image_size=[image_size,image_size], c_dim=1,
                   K=K, batch_size=batch_size, T=T,
                   checkpoint_dir=checkpoint_dir)
     d_optim = tf.train.AdamOptimizer(lr, beta1=0.5).minimize(
@@ -66,17 +67,18 @@ def main(lr, batch_size, alpha, beta, K, T, num_iter, gpu):
 
     load_result = model.load(sess, checkpoint_dir)
     if load_result:
-        print(" [*] Load SUCCESS")
-        iters, _ = load_result
+      print(" [*] Load SUCCESS")
+      iters, _ = load_result
     else:
-        print(" [!] Load failed...")
-        iters = 0
+      print(" [!] Load failed...")
+      iters = 0
 
     g_sum = tf.summary.merge([model.L_p_sum,
                               model.L_gdl_sum, model.loss_sum,
                               model.L_GAN_sum, L_sum])
     d_sum = tf.summary.merge([model.d_loss_real_sum, model.d_loss_sum,
                               model.d_loss_fake_sum, L_sum])
+
     writer = tf.summary.FileWriter(summary_dir, sess.graph)
 
     counter = iters+1
@@ -84,39 +86,34 @@ def main(lr, batch_size, alpha, beta, K, T, num_iter, gpu):
 
     with Parallel(n_jobs=batch_size) as parallel:
       while iters < num_iter:
-        mini_batches = get_minibatches_idx(len(trainfiles),
-                                           batch_size, shuffle=True)
+        mini_batches = get_minibatches_idx(video_tensor.shape[1], batch_size, shuffle=True)
         for _, batchidx in mini_batches:
           if len(batchidx) == batch_size:
-            seq_batch = np.zeros((batch_size, image_size[0], image_size[1],
-                                  K+T, c_dim), dtype="float32")
-            diff_batch = np.zeros((batch_size, image_size[0], image_size[1],
+            seq_batch  = np.zeros((batch_size, image_size, image_size,
+                                   K+T, 1), dtype="float32")
+            diff_batch = np.zeros((batch_size, image_size, image_size,
                                    K-1, 1), dtype="float32")
-            t0 = time.time()
             Ts = np.repeat(np.array([T]),batch_size,axis=0)
             Ks = np.repeat(np.array([K]),batch_size,axis=0)
-            paths  = np.repeat(data_path, batch_size,axis=0)
-            tfiles = np.array(trainfiles)[batchidx]
-            output = parallel(delayed(load_s1m_data)(f, p, trainfiles, k, t)
-                                                 for f, p, k, t in zip(tfiles,
-                                                                       paths,
-                                                                       Ks, Ts))
+            shapes = np.repeat(np.array([image_size]),batch_size,axis=0)
+            output = parallel(delayed(load_moving_mnist_data)(video_tensor, video_index, img_sze, k, t)
+                                                 for video_index,img_sze,k,t in zip(batchidx, shapes, Ks, Ts))
             for i in xrange(batch_size):
-              seq_batch[i]  = output[i][0]
+              seq_batch[i] = output[i][0]
               diff_batch[i] = output[i][1]
 
             if updateD:
               _, summary_str = sess.run([d_optim, d_sum],
-                                  feed_dict={model.diff_in: diff_batch,
-                                             model.xt: seq_batch[:,:,:,K-1],
-                                             model.target: seq_batch})
+                                         feed_dict={model.diff_in: diff_batch,
+                                                    model.xt: seq_batch[:,:,:,K-1],
+                                                    model.target: seq_batch})
               writer.add_summary(summary_str, counter)
-  
+
             if updateG:
               _, summary_str = sess.run([g_optim, g_sum],
-                                  feed_dict={model.diff_in: diff_batch,
-                                             model.xt: seq_batch[:,:,:,K-1],
-                                             model.target: seq_batch})
+                                         feed_dict={model.diff_in: diff_batch,
+                                                    model.xt: seq_batch[:,:,:,K-1],
+                                                    model.target: seq_batch})
               writer.add_summary(summary_str, counter)
 
             errD_fake = model.d_loss_fake.eval({model.diff_in: diff_batch,
@@ -131,7 +128,7 @@ def main(lr, batch_size, alpha, beta, K, T, num_iter, gpu):
             err = L.eval({model.diff_in: diff_batch,
                           model.xt: seq_batch[:,:,:,K-1],
                           model.target: seq_batch})
- 
+
             if errD_fake < margin or errD_real < margin:
               updateD = False
             if errD_fake > (1.-margin) or errD_real > (1.-margin):
@@ -139,23 +136,24 @@ def main(lr, batch_size, alpha, beta, K, T, num_iter, gpu):
             if not updateD and not updateG:
               updateD = True
               updateG = True
-  
+
             counter += 1
   
             print(
                 "Iters: [%2d] time: %4.4f, d_loss: %.8f, L_GAN: %.8f, L: %.8f"
                 % (iters, time.time() - start_time, errD_fake+errD_real, errG, err)
             )
- 
+
             if np.mod(counter, 100) == 1:
               samples = sess.run([model.G],
                                   feed_dict={model.diff_in: diff_batch,
                                              model.xt: seq_batch[:,:,:,K-1],
                                              model.target: seq_batch})[0]
-              samples = np.concatenate((samples[:,:,:,0,:],
-                                        seq_batch[:,:,:,K,:]), axis=0)
+              samples = samples[0].swapaxes(0,2).swapaxes(1,2)
+              sbatch  = seq_batch[0,:,:,K:].swapaxes(0,2).swapaxes(1,2)
+              samples = np.concatenate((samples,sbatch), axis=0)
               print("Saving sample ...")
-              save_images(samples[:,:,:,::-1], [batch_size, batch_size], 
+              save_images(samples[:,:,:,::-1], [2, T], 
                           samples_dir+"train_%s.png" % (iters))
             if np.mod(counter, 500) == 2:
               print("Saving snapshot ...")
@@ -172,13 +170,15 @@ if __name__ == "__main__":
   parser.add_argument("--alpha", type=float, dest="alpha",
                       default=1.0, help="Image loss weight")
   parser.add_argument("--beta", type=float, dest="beta",
-                      default=0.001, help="GAN loss weight")
+                      default=0.02, help="GAN loss weight")
+  parser.add_argument("--image_size", type=int, dest="image_size",
+                      default=64, help="Image size")
   parser.add_argument("--K", type=int, dest="K",
-                      default=4, help="Number of steps to observe from the past")
+                      default=10, help="Number of steps to observe from the past")
   parser.add_argument("--T", type=int, dest="T",
-                      default=1, help="Number of steps into the future")
+                      default=10, help="Number of steps into the future")
   parser.add_argument("--num_iter", type=int, dest="num_iter",
-                      default=150000, help="Number of iterations")
+                      default=100000, help="Number of iterations")
   parser.add_argument("--gpu", type=int, nargs="+", dest="gpu", required=True,
                       help="GPU device id")
 

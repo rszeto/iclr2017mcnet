@@ -55,6 +55,8 @@ def main(lr, batch_size, alpha, beta, image_size, K,
     g_optim = tf.train.AdamOptimizer(lr, beta1=0.5).minimize(
         alpha*model.L_img+beta*model.L_GAN, var_list=model.g_vars
     )
+    L = alpha*model.L_img+beta*model.L_GAN
+    L_sum = tf.summary.scalar("L", L)
 
   gpu_options = tf.GPUOptions(allow_growth=True)
   with tf.Session(config=tf.ConfigProto(allow_soft_placement=True,
@@ -73,9 +75,10 @@ def main(lr, batch_size, alpha, beta, image_size, K,
 
     g_sum = tf.summary.merge([model.L_p_sum,
                               model.L_gdl_sum, model.loss_sum,
-                              model.L_GAN_sum])
+                              model.L_GAN_sum, L_sum])
     d_sum = tf.summary.merge([model.d_loss_real_sum, model.d_loss_sum,
-                              model.d_loss_fake_sum])
+                              model.d_loss_fake_sum, L_sum])
+
     writer = tf.summary.FileWriter(summary_dir, sess.graph)
 
     counter = iters+1
@@ -128,6 +131,9 @@ def main(lr, batch_size, alpha, beta, image_size, K,
             errG = model.L_GAN.eval({model.diff_in: diff_batch,
                                      model.xt: seq_batch[:,:,:,K-1],
                                      model.target: seq_batch})
+            err = L.eval({model.diff_in: diff_batch,
+                          model.xt: seq_batch[:,:,:,K-1],
+                          model.target: seq_batch})
 
             if errD_fake < margin or errD_real < margin:
               updateD = False
@@ -140,8 +146,8 @@ def main(lr, batch_size, alpha, beta, image_size, K,
             counter += 1
   
             print(
-                "Iters: [%2d] time: %4.4f, d_loss: %.8f, L_GAN: %.8f" 
-                % (iters, time.time() - start_time, errD_fake+errD_real,errG)
+                "Iters: [%2d] time: %4.4f, d_loss: %.8f, L_GAN: %.8f, L: %.8f"
+                % (iters, time.time() - start_time, errD_fake+errD_real, errG, err)
             )
 
             if np.mod(counter, 100) == 1:

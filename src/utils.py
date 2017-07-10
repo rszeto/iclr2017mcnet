@@ -6,6 +6,7 @@ import random
 import imageio
 import scipy.misc
 import numpy as np
+import matplotlib.pyplot as plt
 
 
 def transform(image):
@@ -33,6 +34,9 @@ def merge(images, size):
 
 
 def imsave(images, size, path):
+  # for i in range(images.shape[0]):
+  #   plt.imshow(images[i, :, :, 0])
+  #   plt.show()
   return scipy.misc.imsave(path, merge(images, size))
 
 
@@ -86,7 +90,17 @@ def draw_frame(img, is_input):
   return img 
 
 
-def load_kth_data(f_name, data_path, image_size, K, T): 
+def load_kth_data(f_name, data_path, image_size, K, T):
+  '''
+  :param f_name: Line from <data_path>/train_data_list.txt
+  :param data_path: Path to video folder
+  :param image_size: int64 indicating image height and width
+  :param K: Number of past frames
+  :param T: Number of future frames
+  :return:
+    seq: np.float32 array with shape (image_size, image_size, K+T, 1) of video frames. Values are in [-1, 1]
+    diff: np.float32 with shape (image_size, image_size, K-1, 1) of frame deltas. Values are in [-1, 1]
+  '''
   flip = np.random.binomial(1,.5,1)[0]
   tokens = f_name.split()
   vid_path = data_path + tokens[0] + "_uncomp.avi"
@@ -158,3 +172,19 @@ def load_s1m_data(f_name, data_path, trainlist, K, T):
 
   return seq, diff
 
+def load_moving_mnist_data(video_tensor, video_index, image_size, K, T):
+  if image_size != video_tensor.shape[2] or image_size != video_tensor.shape[3]:
+    raise ValueError('Image size %d must match video dimensions %s' % (image_size, video_tensor.shape[2:]))
+  if K + T != video_tensor.shape[0]:
+    raise ValueError('K and T do not add up to video length (K=%d, T=%d, video length=%d' %
+                     (K, T, video_tensor.shape[0]))
+
+  seq = transform(video_tensor[:, video_index, :, :])
+  seq = seq.transpose((1, 2, 0))[:, :, :, np.newaxis]
+  diff = np.zeros((image_size, image_size, K - 1, 1), dtype="float32")
+  for t in xrange(1,K):
+    prev = inverse_transform(seq[:,:,t-1])
+    next = inverse_transform(seq[:,:,t])
+    diff[:,:,t-1] = next.astype("float32")-prev.astype("float32")
+
+  return seq, diff
