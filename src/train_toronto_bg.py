@@ -17,10 +17,13 @@ from joblib import Parallel, delayed
 
 
 def main(lr, batch_size, alpha, beta, image_size, K,
-         T, num_iter, gpu, sample_freq):
-  # Load video tensor
+         T, num_iter, gpu, sample_freq, val_freq):
+  # Load video tensor (T x V x H x W)
   video_tensor_path = '../data/MNIST/toronto_bg.npy'
   video_tensor = np.load(video_tensor_path, mmap_mode='r')
+  # Load validation set tensor
+  video_tensor_path = '../data/MNIST/toronto_bg_val.npy'
+  video_tensor_val = np.load(video_tensor_path, mmap_mode='r')
   margin = 0.3
   updateD = True
   updateG = True
@@ -58,6 +61,12 @@ def main(lr, batch_size, alpha, beta, image_size, K,
     L = alpha*model.L_img+beta*model.L_GAN
     L_sum = tf.summary.scalar("L", L)
 
+    # Add validation summary nodes
+    L_val = tf.placeholder(tf.float32)
+    L_val_sum = tf.summary.scalar("L_val", L_val)
+    samples_val = tf.placeholder(tf.float32)
+    samples_val_sum = tf.summary.image("samples_val", samples_val, max_outputs=10)
+
   gpu_options = tf.GPUOptions(allow_growth=True)
   with tf.Session(config=tf.ConfigProto(allow_soft_placement=True,
                   log_device_placement=False,
@@ -78,6 +87,7 @@ def main(lr, batch_size, alpha, beta, image_size, K,
                               model.L_GAN_sum, L_sum])
     d_sum = tf.summary.merge([model.d_loss_real_sum, model.d_loss_sum,
                               model.d_loss_fake_sum, L_sum])
+    val_sum = tf.summary.merge([L_val_sum, samples_val_sum])
 
     writer = tf.summary.FileWriter(summary_dir, sess.graph)
 
@@ -156,6 +166,48 @@ def main(lr, batch_size, alpha, beta, image_size, K,
               save_images(samples[:,:,:,::-1], [2, T],
                           samples_dir+"train_%s.png" % (iters))
 
+            if np.mod(counter, val_freq) == 1:
+              print("Evaluating model on validation set...")
+              mini_batches_val = get_minibatches_idx(video_tensor_val.shape[1], batch_size)
+              batch_samples_list = []
+              batch_L_list = []
+              batch_targets_list = []
+              # Forward pass over the whole validation set
+              for _, batchidx_val in mini_batches_val:
+                if len(batchidx_val) == batch_size:
+                  seq_batch_val  = np.zeros((batch_size, image_size, image_size,
+                                             K+T, 1), dtype="float32")
+                  diff_batch_val = np.zeros((batch_size, image_size, image_size,
+                                             K-1, 1), dtype="float32")
+                  output_val = parallel(delayed(load_moving_mnist_data)(video_tensor_val, video_index, image_size, K, T)
+                                        for video_index in batchidx_val)
+
+                  for i in xrange(batch_size):
+                    seq_batch_val[i] = output_val[i][0]
+                    diff_batch_val[i] = output_val[i][1]
+
+                  batch_samples, batch_L = sess.run([model.G, L],
+                                                      feed_dict={model.diff_in: diff_batch_val,
+                                                                 model.xt: seq_batch_val[:,:,:,K-1],
+                                                                 model.target: seq_batch_val})
+                  batch_samples_list.append(batch_samples)
+                  batch_L_list.append(batch_L)
+                  batch_targets_list.append(seq_batch_val[:,:,:,K:])
+
+              L_val_np = np.mean(batch_L_list)
+              # Stitch targets and predicted frames into an image
+              # B x H x W x T x C
+              samples_val_np = np.concatenate(batch_samples_list, axis=0)
+              targets_val = np.concatenate(batch_targets_list, axis=0)
+              batch_images = np.concatenate([samples_val_np, targets_val], axis=3)
+              batch_images_list = [merge(x.transpose((2, 0, 1, 3)), [2, T]) for x in batch_images]
+              batch_images = np.stack(batch_images_list)
+
+              # Write to TensorBoard log
+              summary_str = sess.run(val_sum, feed_dict={L_val: L_val_np,
+                                                         samples_val: batch_images})
+              writer.add_summary(summary_str, counter-1)
+
             if np.mod(counter, 500) == 2:
               print("Saving snapshot ...")
               model.save(sess, checkpoint_dir, counter-1)
@@ -184,6 +236,8 @@ if __name__ == "__main__":
                       help="GPU device id")
   parser.add_argument("--sample_freq", type=int, dest="sample_freq",
                       default=100, help="Number of iterations before saving a sample")
+  parser.add_argument("--val_freq", type=int, dest="val_freq",
+                      default=100, help="Number of iterations before evaluating on validation set")
 
   args = parser.parse_args()
   main(**vars(args))

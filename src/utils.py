@@ -22,6 +22,12 @@ def save_images(images, size, image_path):
 
 
 def merge(images, size):
+  '''
+  Tile the given batch of images into a grid
+  :param images: B x H x W x C NumPy array
+  :param size: list with values [H_grid, W_grid]
+  :return:
+  '''
   h, w = images.shape[1], images.shape[2]
   img = np.zeros((h * size[0], w * size[1], 3))
 
