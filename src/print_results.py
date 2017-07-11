@@ -29,13 +29,17 @@ x = np.arange(len(psnr))+1
 # Draw PSNR plot
 ax1 = plt.subplot(211)
 plt.plot(x, psnr)
-plt.axis([1, len(psnr), 20, 38])
 plt.xticks(x)
-plt.yticks(np.arange(20, 39, 2))
 ax1.set_ylabel('PSNR')
 ax1.grid(True)
 for line in ax1.get_xgridlines() + ax1.get_ygridlines():
     line.set_linestyle('dotted')
+if test_set_label == 'KTH':
+    plt.axis([1, len(psnr), 20, 35])
+    plt.yticks(np.arange(20, 35, 2))
+else:
+    plt.axis([1, len(psnr), 10, 33])
+    plt.yticks(np.arange(10, 33, 5))
 
 # Title here so it appears above both plots
 plt.title(title)
@@ -43,13 +47,17 @@ plt.title(title)
 # Draw SSIM plot
 ax2 = plt.subplot(212)
 ax2.plot(x, ssim)
-plt.axis([1, len(psnr), 0.6, 1.0])
 plt.xticks(x)
-plt.yticks(np.arange(0.6, 1.01, 0.1))
 ax2.set_ylabel('SSIM')
 ax2.grid(True)
 for line in ax2.get_xgridlines() + ax2.get_ygridlines():
     line.set_linestyle('dotted')
+if test_set_label == 'KTH':
+    plt.axis([1, len(psnr), 0.6, 1.0])
+    plt.yticks(np.arange(0.6, 1.01, 0.1))
+else:
+    plt.axis([1, len(psnr), 0.35, 1.0])
+    plt.yticks(np.arange(0.4, 1.01, 0.1))
 
 plt.tight_layout()
 # Hack around plt.show() because it doesn't return for some reason
