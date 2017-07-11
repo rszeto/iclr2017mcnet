@@ -25,7 +25,6 @@ def main(lr, batch_size, alpha, beta, image_size, K,
   # Load validation set tensor
   video_tensor_path = '../data/MNIST/toronto_bg_val.npy'
   video_tensor_val = np.load(video_tensor_path, mmap_mode='r')
-  margin = 0.3
   updateD = True
   updateG = True
   prefix  = ("toronto_bg_MCNET"
@@ -35,7 +34,8 @@ def main(lr, batch_size, alpha, beta, image_size, K,
           + "_batch_size="+str(batch_size)
           + "_alpha="+str(alpha)
           + "_beta="+str(beta)
-          + "_lr="+str(lr))
+          + "_lr="+str(lr)
+          + "_margin="+str(margin))
 
   print("\n"+prefix+"\n")
   checkpoint_dir = "../models/"+prefix+"/"

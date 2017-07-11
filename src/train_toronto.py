@@ -34,7 +34,8 @@ def main(lr, batch_size, alpha, beta, image_size, K,
           + "_batch_size="+str(batch_size)
           + "_alpha="+str(alpha)
           + "_beta="+str(beta)
-          + "_lr="+str(lr))
+          + "_lr="+str(lr)
+          + "_margin="+str(margin))
 
   print("\n"+prefix+"\n")
   checkpoint_dir = "../models/"+prefix+"/"
