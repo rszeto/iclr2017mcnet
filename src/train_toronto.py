@@ -17,14 +17,14 @@ from joblib import Parallel, delayed
 
 
 def main(lr, batch_size, alpha, beta, image_size, K,
-         T, num_iter, gpu):
-  # Load video tensor
+         T, num_iter, gpu, sample_freq, val_freq,
+         margin):
+  # Load video tensor (T x V x H x W)
   video_tensor_path = '../data/MNIST/toronto.npy'
   video_tensor = np.load(video_tensor_path, mmap_mode='r')
   # Load validation set tensor
   video_tensor_path = '../data/MNIST/toronto_val.npy'
   video_tensor_val = np.load(video_tensor_path, mmap_mode='r')
-  margin = 0.3
   updateD = True
   updateG = True
   prefix  = ("toronto_MCNET"
@@ -61,6 +61,12 @@ def main(lr, batch_size, alpha, beta, image_size, K,
     L = alpha*model.L_img+beta*model.L_GAN
     L_sum = tf.summary.scalar("L", L)
 
+    # Add discriminator/generator graph summary nodes
+    updateD_tf = tf.placeholder(tf.float32)
+    updateD_sum = tf.summary.scalar("updateD", updateD_tf)
+    updateG_tf = tf.placeholder(tf.float32)
+    updateG_sum = tf.summary.scalar("updateG", updateG_tf)
+
     # Add validation summary nodes
     L_val = tf.placeholder(tf.float32)
     L_val_sum = tf.summary.scalar("L_val", L_val)
@@ -88,6 +94,7 @@ def main(lr, batch_size, alpha, beta, image_size, K,
     d_sum = tf.summary.merge([model.d_loss_real_sum, model.d_loss_sum,
                               model.d_loss_fake_sum, L_sum])
     val_sum = tf.summary.merge([L_val_sum, samples_val_sum])
+    update_sum = tf.summary.merge([updateD_sum, updateG_sum])
 
     writer = tf.summary.FileWriter(summary_dir, sess.graph)
 
@@ -126,6 +133,12 @@ def main(lr, batch_size, alpha, beta, image_size, K,
                                                     model.target: seq_batch})
               writer.add_summary(summary_str, counter)
 
+            # Write discriminator/generator update graph
+            summary_str = sess.run(update_sum,
+                                   feed_dict={updateD_tf: updateD,
+                                              updateG_tf: updateG})
+            writer.add_summary(summary_str, counter)
+
             errD_fake = model.d_loss_fake.eval({model.diff_in: diff_batch,
                                                 model.xt: seq_batch[:,:,:,K-1],
                                                 model.target: seq_batch})
@@ -139,6 +152,11 @@ def main(lr, batch_size, alpha, beta, image_size, K,
                           model.xt: seq_batch[:,:,:,K-1],
                           model.target: seq_batch})
 
+            print(
+                "Iters: [%2d] time: %4.4f, d_loss: %.8f, L_GAN: %.8f, L: %.8f, updateD: %r, updateG: %r"
+                % (iters, time.time() - start_time, errD_fake+errD_real, errG, err, updateD, updateG)
+            )
+
             if errD_fake < margin or errD_real < margin:
               updateD = False
             if errD_fake > (1.-margin) or errD_real > (1.-margin):
@@ -148,11 +166,6 @@ def main(lr, batch_size, alpha, beta, image_size, K,
               updateG = True
 
             counter += 1
-
-            print(
-                "Iters: [%2d] time: %4.4f, d_loss: %.8f, L_GAN: %.8f, L: %.8f"
-                % (iters, time.time() - start_time, errD_fake+errD_real, errG, err)
-            )
 
             if np.mod(counter, sample_freq) == 1:
               samples = sess.run([model.G],
@@ -238,6 +251,8 @@ if __name__ == "__main__":
                       default=100, help="Number of iterations before saving a sample")
   parser.add_argument("--val_freq", type=int, dest="val_freq",
                       default=100, help="Number of iterations before evaluating on validation set")
+  parser.add_argument("--margin", type=float, dest="margin",
+                      default=0.3, help="Error margin for updating discriminator/generator")
 
   args = parser.parse_args()
   main(**vars(args))
