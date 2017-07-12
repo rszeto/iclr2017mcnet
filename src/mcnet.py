@@ -73,7 +73,7 @@ class MCNET(object):
       p_mat = tf.fill(self.G.shape, self.p)
       self.L_p = tf.reduce_mean(
           # tf.square(self.G-self.target[:,:,:,self.K:,:])
-          tf.pow(self.G-self.target[:,:,:,self.K:,:], p_mat)
+          tf.pow(tf.abs(self.G-self.target[:,:,:,self.K:,:]), p_mat)
       )
       self.L_gdl = gdl(gen_sim, true_sim, alpha=self.alpha)
       self.L_img = self.L_p + self.L_gdl
