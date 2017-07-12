@@ -179,11 +179,8 @@ def load_s1m_data(f_name, data_path, trainlist, K, T):
 def load_moving_mnist_data(video_tensor, video_index, image_size, K, T):
   if image_size != video_tensor.shape[2] or image_size != video_tensor.shape[3]:
     raise ValueError('Image size %d must match video dimensions %s' % (image_size, video_tensor.shape[2:]))
-  if K + T != video_tensor.shape[0]:
-    raise ValueError('K and T do not add up to video length (K=%d, T=%d, video length=%d' %
-                     (K, T, video_tensor.shape[0]))
 
-  seq = transform(video_tensor[:, video_index, :, :])
+  seq = transform(video_tensor[:K+T, video_index, :, :])
   seq = seq.transpose((1, 2, 0))[:, :, :, np.newaxis]
   diff = np.zeros((image_size, image_size, K - 1, 1), dtype="float32")
   for t in xrange(1,K):
