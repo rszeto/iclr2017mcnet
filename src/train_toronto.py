@@ -18,12 +18,13 @@ from joblib import Parallel, delayed
 
 def main(lr, batch_size, alpha, beta, image_size, K,
          T, num_iter, gpu, sample_freq, val_freq,
-         margin, always_update_dg):
+         margin, always_update_dg,
+         lp_p, gdl_a):
   # Load video tensor (T x V x H x W)
-  video_tensor_path = '../data/MNIST/toronto.npy'
+  video_tensor_path = '../data/MNIST/toronto_tiny.npy'
   video_tensor = np.load(video_tensor_path, mmap_mode='r')
   # Load validation set tensor
-  video_tensor_path = '../data/MNIST/toronto_val.npy'
+  video_tensor_path = '../data/MNIST/toronto_tiny.npy'
   video_tensor_val = np.load(video_tensor_path, mmap_mode='r')
   updateD = True
   updateG = True
@@ -35,6 +36,8 @@ def main(lr, batch_size, alpha, beta, image_size, K,
           + "_alpha="+str(alpha)
           + "_beta="+str(beta)
           + "_lr="+str(lr)
+          + "_lp_p="+str(lp_p)
+          + "_gdl_a="+str(gdl_a)
           + "_margin="+str(margin)
           + "_always_update_dg="+str(always_update_dg))
 
@@ -53,6 +56,7 @@ def main(lr, batch_size, alpha, beta, image_size, K,
   with tf.device("/gpu:%d"%gpu[0]):
     model = MCNET(image_size=[image_size,image_size], c_dim=1,
                   K=K, batch_size=batch_size, T=T,
+                  p=lp_p, alpha=gdl_a,
                   checkpoint_dir=checkpoint_dir)
     d_optim = tf.train.AdamOptimizer(lr, beta1=0.5).minimize(
         model.d_loss, var_list=model.d_vars
@@ -258,6 +262,10 @@ if __name__ == "__main__":
                       default=0.3, help="Error margin for updating discriminator/generator")
   parser.add_argument("--always_update_dg", type=bool, dest="always_update_dg",
                       default=False, help="Whether to always update both discriminator and generator")
+  parser.add_argument("--lp_p", type=float, dest="lp_p",
+                      default=2.0, help="Hyperparameter for L_p loss")
+  parser.add_argument("--gdl_a", type=float, dest="gdl_a",
+                      default=1.0, help="Hyperparameter for L_gdl loss")
 
   args = parser.parse_args()
   main(**vars(args))

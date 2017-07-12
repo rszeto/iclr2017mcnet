@@ -7,7 +7,8 @@ from utils import *
 
 class MCNET(object):
   def __init__(self, image_size, batch_size=32, c_dim=3,
-               K=10, T=10, checkpoint_dir=None, is_train=True):
+               K=10, T=10, checkpoint_dir=None, is_train=True,
+               p=2, alpha=1):
 
     self.batch_size = batch_size
     self.image_size = image_size
@@ -24,6 +25,8 @@ class MCNET(object):
     self.xt_shape = [batch_size, self.image_size[0], self.image_size[1], c_dim]
     self.target_shape = [batch_size, self.image_size[0], self.image_size[1],
                          K+T, c_dim]
+    self.p = float(p)
+    self.alpha = float(alpha)
 
     self.build_model()
 
@@ -67,10 +70,12 @@ class MCNET(object):
       with tf.variable_scope("DIS", reuse=True):
         self.D_, self.D_logits_ = self.discriminator(gen_data)
 
+      p_mat = tf.fill(self.G.shape, self.p)
       self.L_p = tf.reduce_mean(
-          tf.square(self.G-self.target[:,:,:,self.K:,:])
+          # tf.square(self.G-self.target[:,:,:,self.K:,:])
+          tf.pow(self.G-self.target[:,:,:,self.K:,:], p_mat)
       )
-      self.L_gdl = gdl(gen_sim, true_sim, 1.)
+      self.L_gdl = gdl(gen_sim, true_sim, alpha=self.alpha)
       self.L_img = self.L_p + self.L_gdl
 
       self.d_loss_real = tf.reduce_mean(
