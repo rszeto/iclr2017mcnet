@@ -18,7 +18,7 @@ from joblib import Parallel, delayed
 
 def main(lr, batch_size, alpha, beta, image_size, K,
          T, num_iter, gpu, sample_freq, val_freq,
-         margin):
+         margin, always_update_dg):
   # Load video tensor (T x V x H x W)
   video_tensor_path = '../data/MNIST/toronto.npy'
   video_tensor = np.load(video_tensor_path, mmap_mode='r')
@@ -35,7 +35,8 @@ def main(lr, batch_size, alpha, beta, image_size, K,
           + "_alpha="+str(alpha)
           + "_beta="+str(beta)
           + "_lr="+str(lr)
-          + "_margin="+str(margin))
+          + "_margin="+str(margin)
+          + "_always_update_dg="+str(always_update_dg))
 
   print("\n"+prefix+"\n")
   checkpoint_dir = "../models/"+prefix+"/"
@@ -158,13 +159,14 @@ def main(lr, batch_size, alpha, beta, image_size, K,
                 % (iters, time.time() - start_time, errD_fake+errD_real, errG, err, updateD, updateG)
             )
 
-            if errD_fake < margin or errD_real < margin:
-              updateD = False
-            if errD_fake > (1.-margin) or errD_real > (1.-margin):
-              updateG = False
-            if not updateD and not updateG:
-              updateD = True
-              updateG = True
+            if not always_update_dg:
+              if errD_fake < margin or errD_real < margin:
+                updateD = False
+              if errD_fake > (1.-margin) or errD_real > (1.-margin):
+                updateG = False
+              if not updateD and not updateG:
+                updateD = True
+                updateG = True
 
             counter += 1
 
@@ -254,6 +256,8 @@ if __name__ == "__main__":
                       default=100, help="Number of iterations before evaluating on validation set")
   parser.add_argument("--margin", type=float, dest="margin",
                       default=0.3, help="Error margin for updating discriminator/generator")
+  parser.add_argument("--always_update_dg", type=bool, dest="always_update_dg",
+                      default=False, help="Whether to always update both discriminator and generator")
 
   args = parser.parse_args()
   main(**vars(args))
