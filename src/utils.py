@@ -40,10 +40,8 @@ def merge(images, size):
 
 
 def imsave(images, size, path):
-  # for i in range(images.shape[0]):
-  #   plt.imshow(images[i, :, :, 0])
-  #   plt.show()
-  return scipy.misc.imsave(path, merge(images, size))
+  tiled_images = merge(images, size)
+  return scipy.misc.toimage(tiled_images, cmin=0, cmax=255).save(path)
 
 
 def get_minibatches_idx(n, minibatch_size, shuffle=False):
