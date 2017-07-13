@@ -8,7 +8,7 @@ from utils import *
 class MCNET(object):
   def __init__(self, image_size, batch_size=32, c_dim=3,
                K=10, T=10, checkpoint_dir=None, is_train=True,
-               p=2, alpha=1):
+               p=2, alpha=1, target_scale=1.0):
 
     self.batch_size = batch_size
     self.image_size = image_size
@@ -27,6 +27,7 @@ class MCNET(object):
                          K+T, c_dim]
     self.p = float(p)
     self.alpha = float(alpha)
+    self.target_scale = float(target_scale)
 
     self.build_model()
 
@@ -41,12 +42,12 @@ class MCNET(object):
 
     self.G = tf.concat(axis=3,values=pred)
     if self.is_train:
-      true_sim = inverse_transform(self.target[:,:,:,self.K:,:])
+      true_sim = inverse_transform(self.target[:,:,:,self.K:,:], self.target_scale)
       if self.c_dim == 1: true_sim = tf.tile(true_sim,[1,1,1,1,3])
       true_sim = tf.reshape(tf.transpose(true_sim,[0,3,1,2,4]),
                                          [-1, self.image_size[0],
                                           self.image_size[1], 3])
-      gen_sim = inverse_transform(self.G)
+      gen_sim = inverse_transform(self.G, self.target_scale)
       if self.c_dim == 1: gen_sim = tf.tile(gen_sim,[1,1,1,1,3])
       gen_sim = tf.reshape(tf.transpose(gen_sim,[0,3,1,2,4]),
                                         [-1, self.image_size[0],
@@ -150,14 +151,14 @@ class MCNET(object):
                                    xt[:,:,:,0:1]])
 
         x_hat_gray = 1./255.*tf.image.rgb_to_grayscale(
-            inverse_transform(x_hat_rgb)*255.
+            inverse_transform(x_hat_rgb, self.target_scale)*255.
         )
         xt_gray = 1./255.*tf.image.rgb_to_grayscale(
-            inverse_transform(xt_rgb)*255.
+            inverse_transform(xt_rgb, self.target_scale)*255.
         )
       else:
-        x_hat_gray = inverse_transform(x_hat)
-        xt_gray = inverse_transform(xt)
+        x_hat_gray = inverse_transform(x_hat, self.target_scale)
+        xt_gray = inverse_transform(xt, self.target_scale)
 
       diff_in = x_hat_gray - xt_gray
       xt = x_hat

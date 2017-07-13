@@ -9,16 +9,16 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-def transform(image):
-    return image/127.5 - 1.
+def transform(image, target_scale=1.0):
+    return target_scale*(image/127.5 - 1.)
 
 
-def inverse_transform(images):
-    return (images+1.)/2.
+def inverse_transform(images, target_scale=1.0):
+    return (images/target_scale+1.)/2.
 
 
-def save_images(images, size, image_path):
-  return imsave(inverse_transform(images)*255., size, image_path)
+def save_images(images, size, image_path, target_scale):
+  return imsave(inverse_transform(images, target_scale)*255., size, image_path)
 
 
 def merge(images, size):
@@ -176,16 +176,16 @@ def load_s1m_data(f_name, data_path, trainlist, K, T):
 
   return seq, diff
 
-def load_moving_mnist_data(video_tensor, video_index, image_size, K, T):
+def load_moving_mnist_data(video_tensor, video_index, image_size, K, T, target_scale):
   if image_size != video_tensor.shape[2] or image_size != video_tensor.shape[3]:
     raise ValueError('Image size %d must match video dimensions %s' % (image_size, video_tensor.shape[2:]))
 
-  seq = transform(video_tensor[:K+T, video_index, :, :])
+  seq = transform(video_tensor[:K+T, video_index, :, :], target_scale)
   seq = seq.transpose((1, 2, 0))[:, :, :, np.newaxis]
   diff = np.zeros((image_size, image_size, K - 1, 1), dtype="float32")
   for t in xrange(1,K):
-    prev = inverse_transform(seq[:,:,t-1])
-    next = inverse_transform(seq[:,:,t])
+    prev = inverse_transform(seq[:,:,t-1], target_scale)
+    next = inverse_transform(seq[:,:,t], target_scale)
     diff[:,:,t-1] = next.astype("float32")-prev.astype("float32")
 
   return seq, diff

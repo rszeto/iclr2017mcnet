@@ -19,7 +19,7 @@ from joblib import Parallel, delayed
 def main(lr, batch_size, alpha, beta, image_size, K,
          T, num_iter, gpu, sample_freq, val_freq,
          margin, always_update_dg,
-         lp_p, gdl_a):
+         lp_p, gdl_a, target_scale):
   # Load video tensor (T x V x H x W)
   video_tensor_path = '../data/MNIST/toronto_tiny.npy'
   video_tensor = np.load(video_tensor_path, mmap_mode='r')
@@ -39,7 +39,8 @@ def main(lr, batch_size, alpha, beta, image_size, K,
           + "_lp_p="+str(lp_p)
           + "_gdl_a="+str(gdl_a)
           + "_margin="+str(margin)
-          + "_always_update_dg="+str(always_update_dg))
+          + "_always_update_dg="+str(always_update_dg)
+          + "_target_scale="+str(target_scale))
 
   print("\n"+prefix+"\n")
   checkpoint_dir = "../models/"+prefix+"/"
@@ -57,7 +58,8 @@ def main(lr, batch_size, alpha, beta, image_size, K,
     model = MCNET(image_size=[image_size,image_size], c_dim=1,
                   K=K, batch_size=batch_size, T=T,
                   p=lp_p, alpha=gdl_a,
-                  checkpoint_dir=checkpoint_dir)
+                  checkpoint_dir=checkpoint_dir,
+                  target_scale=target_scale)
     d_optim = tf.train.AdamOptimizer(lr, beta1=0.5).minimize(
         model.d_loss, var_list=model.d_vars
     )
@@ -119,7 +121,7 @@ def main(lr, batch_size, alpha, beta, image_size, K,
             Ts = np.repeat(np.array([T]),batch_size,axis=0)
             Ks = np.repeat(np.array([K]),batch_size,axis=0)
             shapes = np.repeat(np.array([image_size]),batch_size,axis=0)
-            output = parallel(delayed(load_moving_mnist_data)(video_tensor, video_index, img_sze, k, t)
+            output = parallel(delayed(load_moving_mnist_data)(video_tensor, video_index, img_sze, k, t, target_scale)
                                                  for video_index,img_sze,k,t in zip(batchidx, shapes, Ks, Ts))
             for i in xrange(batch_size):
               seq_batch[i] = output[i][0]
@@ -184,7 +186,8 @@ def main(lr, batch_size, alpha, beta, image_size, K,
               samples = np.concatenate((samples,sbatch), axis=0)
               print("Saving sample ...")
               save_images(samples[:,:,:,::-1], [2, T],
-                          samples_dir+"train_%s.png" % (iters))
+                          samples_dir+"train_%s.png" % (iters),
+                          target_scale)
 
             if np.mod(counter, val_freq) == 1:
               print("Evaluating model on validation set...")
@@ -199,7 +202,7 @@ def main(lr, batch_size, alpha, beta, image_size, K,
                                              K+T, 1), dtype="float32")
                   diff_batch_val = np.zeros((batch_size, image_size, image_size,
                                              K-1, 1), dtype="float32")
-                  output_val = parallel(delayed(load_moving_mnist_data)(video_tensor_val, video_index, image_size, K, T)
+                  output_val = parallel(delayed(load_moving_mnist_data)(video_tensor_val, video_index, image_size, K, T, target_scale)
                                         for video_index in batchidx_val)
 
                   for i in xrange(batch_size):
@@ -219,9 +222,11 @@ def main(lr, batch_size, alpha, beta, image_size, K,
               # B x H x W x T x C
               samples_val_np = np.concatenate(batch_samples_list, axis=0)
               targets_val = np.concatenate(batch_targets_list, axis=0)
-              batch_images = np.concatenate([samples_val_np, targets_val], axis=3)
+              batch_images = inverse_transform(np.concatenate([samples_val_np, targets_val], axis=3), target_scale)
               batch_images_list = [merge(x.transpose((2, 0, 1, 3)), [2, T]) for x in batch_images]
               batch_images = np.stack(batch_images_list)
+              # Clip negative values
+              batch_images = np.maximum(batch_images, 0)
 
               # Write to TensorBoard log
               summary_str = sess.run(val_sum, feed_dict={L_val: L_val_np,
@@ -266,6 +271,8 @@ if __name__ == "__main__":
                       default=2.0, help="Hyperparameter for L_p loss")
   parser.add_argument("--gdl_a", type=float, dest="gdl_a",
                       default=1.0, help="Hyperparameter for L_gdl loss")
+  parser.add_argument("--target_scale", type=float, dest="target_scale",
+                      default=1.0, help="How much to scale model targets")
 
   args = parser.parse_args()
   main(**vars(args))
