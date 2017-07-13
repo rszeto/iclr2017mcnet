@@ -19,16 +19,17 @@ from joblib import Parallel, delayed
 def main(lr, batch_size, alpha, beta, image_size, K,
          T, num_iter, gpu, sample_freq, val_freq,
          margin, always_update_dg,
-         lp_p, gdl_a, target_scale):
+         lp_p, gdl_a, target_scale,
+         dataset_label):
   # Load video tensor (T x V x H x W)
-  video_tensor_path = '../data/MNIST/toronto_tiny.npy'
+  video_tensor_path = '../data/MNIST/%s.npy' % dataset_label
   video_tensor = np.load(video_tensor_path, mmap_mode='r')
   # Load validation set tensor
-  video_tensor_path = '../data/MNIST/toronto_tiny.npy'
+  video_tensor_path = '../data/MNIST/%s_val.npy' % dataset_label
   video_tensor_val = np.load(video_tensor_path, mmap_mode='r')
   updateD = True
   updateG = True
-  prefix  = ("toronto_MCNET"
+  prefix  = ("%s_MCNET" % dataset_label
           + "_image_size="+str(image_size)
           + "_K="+str(K)
           + "_T="+str(T)
@@ -225,8 +226,10 @@ def main(lr, batch_size, alpha, beta, image_size, K,
               batch_images = inverse_transform(np.concatenate([samples_val_np, targets_val], axis=3), target_scale)
               batch_images_list = [merge(x.transpose((2, 0, 1, 3)), [2, T]) for x in batch_images]
               batch_images = np.stack(batch_images_list)
-              # Clip negative values
-              batch_images = np.maximum(batch_images, 0)
+              # Clip values outside of [0, 1], then scale to [0, 255]
+              batch_images = 255 * np.minimum(np.maximum(batch_images, 0), 255)
+              # Convert to avoid TensorFlow scaling weirdness
+              batch_images = batch_images.astype(np.uint8)
 
               # Write to TensorBoard log
               summary_str = sess.run(val_sum, feed_dict={L_val: L_val_np,
@@ -257,12 +260,12 @@ if __name__ == "__main__":
                       default=10, help="Number of steps into the future")
   parser.add_argument("--num_iter", type=int, dest="num_iter",
                       default=100000, help="Number of iterations")
-  parser.add_argument("--gpu", type=int, nargs="+", dest="gpu", required=True,
+  parser.add_argument("--gpu", type=int, nargs="+", dest="gpu", default=[0],
                       help="GPU device id")
   parser.add_argument("--sample_freq", type=int, dest="sample_freq",
                       default=100, help="Number of iterations before saving a sample")
   parser.add_argument("--val_freq", type=int, dest="val_freq",
-                      default=100, help="Number of iterations before evaluating on validation set")
+                      default=500, help="Number of iterations before evaluating on validation set")
   parser.add_argument("--margin", type=float, dest="margin",
                       default=0.3, help="Error margin for updating discriminator/generator")
   parser.add_argument("--always_update_dg", type=bool, dest="always_update_dg",
@@ -272,7 +275,9 @@ if __name__ == "__main__":
   parser.add_argument("--gdl_a", type=float, dest="gdl_a",
                       default=1.0, help="Hyperparameter for L_gdl loss")
   parser.add_argument("--target_scale", type=float, dest="target_scale",
-                      default=1.0, help="How much to scale model targets")
+                      default=0.75, help="How much to scale model targets")
+  parser.add_argument("--dataset_label", type=str, dest="dataset_label", required=True,
+                      help="Name of the dataset (i.e. X in ../data/MNIST/X.npy)")
 
   args = parser.parse_args()
   main(**vars(args))
