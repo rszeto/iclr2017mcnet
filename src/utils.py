@@ -1,6 +1,10 @@
 """
 Some codes from https://github.com/Newmu/dcgan_code
 """
+# Make plots without X11 server
+import matplotlib
+matplotlib.use('Agg')
+
 import cv2
 import random
 import imageio
