@@ -9,12 +9,9 @@ Tk().withdraw()
 filename = askopenfilename(initialdir='../results/quantitative')
 if not filename: exit()
 
-# Parse the path to get dataset, iters, and batch size
-parse = re.search('.*/(KTH|UCF101)/.*(batch_size=[0-9]+).*?([0-9]+).npz', filename)
+# Parse the path to get dataset
+parse = re.search('(KTH|UCF101|MNIST.*)/', filename)
 test_set_label = parse.group(1)
-batch_size = parse.group(2)
-iter_num = int(parse.group(3))
-title = '%s, %s, iters=%d' % (test_set_label, batch_size, iter_num)
 
 results = np.load(filename)
 psnr = results['psnr'].mean(axis=0)
@@ -37,12 +34,9 @@ for line in ax1.get_xgridlines() + ax1.get_ygridlines():
 if test_set_label == 'KTH':
     plt.axis([1, len(psnr), 20, 35])
     plt.yticks(np.arange(20, 35, 2))
-else:
+elif test_set_label == 'UCF101':
     plt.axis([1, len(psnr), 10, 33])
     plt.yticks(np.arange(10, 33, 5))
-
-# Title here so it appears above both plots
-plt.title(title)
 
 # Draw SSIM plot
 ax2 = plt.subplot(212)
@@ -55,7 +49,7 @@ for line in ax2.get_xgridlines() + ax2.get_ygridlines():
 if test_set_label == 'KTH':
     plt.axis([1, len(psnr), 0.6, 1.0])
     plt.yticks(np.arange(0.6, 1.01, 0.1))
-else:
+elif test_set_label == 'UCF101':
     plt.axis([1, len(psnr), 0.35, 1.0])
     plt.yticks(np.arange(0.4, 1.01, 0.1))
 
