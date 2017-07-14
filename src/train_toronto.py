@@ -15,6 +15,10 @@ from os.path import exists
 from argparse import ArgumentParser
 from joblib import Parallel, delayed
 
+import skimage.measure as measure
+import ssim
+from PIL import Image
+
 
 def main(lr, batch_size, alpha, beta, image_size, K,
          T, num_iter, gpu, sample_freq, val_freq,
@@ -25,7 +29,7 @@ def main(lr, batch_size, alpha, beta, image_size, K,
   video_tensor_path = '../data/MNIST/%s.npy' % dataset_label
   video_tensor = np.load(video_tensor_path, mmap_mode='r')
   # Load validation set tensor
-  video_tensor_path = '../data/MNIST/%s_val.npy' % dataset_label
+  video_tensor_path = '../data/MNIST/%s_tiny.npy' % dataset_label
   video_tensor_val = np.load(video_tensor_path, mmap_mode='r')
   updateD = True
   updateG = True
@@ -81,6 +85,14 @@ def main(lr, batch_size, alpha, beta, image_size, K,
     L_val_sum = tf.summary.scalar("L_val", L_val)
     samples_val = tf.placeholder(tf.float32)
     samples_val_sum = tf.summary.image("samples_val", samples_val, max_outputs=10)
+    psnr_auc = tf.placeholder(tf.float32)
+    psnr_auc_sum = tf.summary.scalar("psnr_auc", psnr_auc)
+    psnr_plot = tf.placeholder(tf.uint8)
+    psnr_plot_sum = tf.summary.image("psnr_val", psnr_plot, max_outputs=1)
+    ssim_auc = tf.placeholder(tf.float32)
+    ssim_auc_sum = tf.summary.scalar("ssim_auc", ssim_auc)
+    ssim_plot = tf.placeholder(tf.uint8)
+    ssim_plot_sum = tf.summary.image("ssim_val", ssim_plot, max_outputs=1)
 
   gpu_options = tf.GPUOptions(allow_growth=True)
   with tf.Session(config=tf.ConfigProto(allow_soft_placement=True,
@@ -102,7 +114,7 @@ def main(lr, batch_size, alpha, beta, image_size, K,
                               model.L_GAN_sum, L_sum])
     d_sum = tf.summary.merge([model.d_loss_real_sum, model.d_loss_sum,
                               model.d_loss_fake_sum, L_sum])
-    val_sum = tf.summary.merge([L_val_sum, samples_val_sum])
+    val_sum = tf.summary.merge([L_val_sum, samples_val_sum, psnr_plot_sum, psnr_auc_sum, ssim_plot_sum, ssim_auc_sum])
     update_sum = tf.summary.merge([updateD_sum, updateG_sum])
 
     writer = tf.summary.FileWriter(summary_dir, sess.graph)
@@ -219,11 +231,35 @@ def main(lr, batch_size, alpha, beta, image_size, K,
                   batch_targets_list.append(seq_batch_val[:,:,:,K:])
 
               L_val_np = np.mean(batch_L_list)
-              # Stitch targets and predicted frames into an image
               # B x H x W x T x C
-              samples_val_np = np.concatenate(batch_samples_list, axis=0)
-              targets_val = np.concatenate(batch_targets_list, axis=0)
-              batch_images = inverse_transform(np.concatenate([samples_val_np, targets_val], axis=3), target_scale)
+              samples_val_np = inverse_transform(np.concatenate(batch_samples_list, axis=0), target_scale)
+              targets_val = inverse_transform(np.concatenate(batch_targets_list, axis=0), target_scale)
+
+              # Collect per-frame PSNR and SSIM
+              psnr_values = np.zeros((video_tensor_val.shape[1], T))
+              ssim_values = np.zeros((video_tensor_val.shape[1], T))
+              for video_idx in xrange(samples_val_np.shape[0]):
+                for frame_idx in xrange(T):
+                  sample_frame = np.array(255 * samples_val_np[video_idx, :, :, frame_idx, :], dtype=np.uint8)
+                  target_frame = np.array(255 * targets_val[video_idx, :, :, frame_idx, :], dtype=np.uint8)
+                  # Clip sample values outside of [0, 255]
+                  sample_frame = np.minimum(np.maximum(sample_frame, 0), 255)
+                  psnr_values[video_idx, frame_idx] = measure.compare_psnr(sample_frame, target_frame)
+                  ssim_values[video_idx, frame_idx] = ssim.compute_ssim(
+                      Image.fromarray(cv2.cvtColor(target_frame, cv2.COLOR_GRAY2BGR)),
+                      Image.fromarray(cv2.cvtColor(sample_frame, cv2.COLOR_GRAY2BGR))
+                  )
+
+              # Generate plots and AUC of PSNR and SSIM averaged over all videos
+              psnr_curve = psnr_values.mean(axis=0)
+              ssim_curve = ssim_values.mean(axis=0)
+              psnr_auc_np = np.sum(psnr_curve)
+              ssim_auc_np = np.sum(ssim_curve)
+              psnr_plot_np = plot_to_image(range(1, T+1), psnr_curve, [1, T+1, 0, 50])
+              ssim_plot_np = plot_to_image(range(1, T+1), ssim_curve, [1, T+1, 0, 1])
+
+              # Stitch targets and predicted frames into an image
+              batch_images = np.concatenate([samples_val_np, targets_val], axis=3)
               batch_images_list = [merge(x.transpose((2, 0, 1, 3)), [2, T]) for x in batch_images]
               batch_images = np.stack(batch_images_list)
               # Clip values outside of [0, 1], then scale to [0, 255]
@@ -233,7 +269,11 @@ def main(lr, batch_size, alpha, beta, image_size, K,
 
               # Write to TensorBoard log
               summary_str = sess.run(val_sum, feed_dict={L_val: L_val_np,
-                                                         samples_val: batch_images})
+                                                         samples_val: batch_images,
+                                                         psnr_plot: psnr_plot_np,
+                                                         psnr_auc: psnr_auc_np,
+                                                         ssim_plot: ssim_plot_np,
+                                                         ssim_auc: ssim_auc_np})
               writer.add_summary(summary_str, counter-1)
 
             if np.mod(counter, 500) == 2:

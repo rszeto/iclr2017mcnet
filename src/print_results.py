@@ -10,7 +10,7 @@ filename = askopenfilename(initialdir='../results/quantitative')
 if not filename: exit()
 
 # Parse the path to get dataset
-parse = re.search('(KTH|UCF101|MNIST.*)/', filename)
+parse = re.search('(KTH|UCF101|MNIST.+?)/', filename)
 test_set_label = parse.group(1)
 
 results = np.load(filename)

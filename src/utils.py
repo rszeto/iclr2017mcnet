@@ -7,6 +7,8 @@ import imageio
 import scipy.misc
 import numpy as np
 import matplotlib.pyplot as plt
+import io
+from PIL import Image
 
 
 def transform(image, target_scale=1.0):
@@ -189,3 +191,32 @@ def load_moving_mnist_data(video_tensor, video_index, image_size, K, T, target_s
     diff[:,:,t-1] = next.astype("float32")-prev.astype("float32")
 
   return seq, diff
+
+
+def plot_to_image(x, y, lims):
+  '''
+  Plot y vs. x and return the graph as a NumPy array
+  :param x: X values
+  :param y: Y values
+  :param lims: [x_start, x_end, y_start, y_end]
+  :return:
+  '''
+  fig = plt.figure()
+  ax = fig.add_subplot(111)
+  ax.plot(x, y)
+  ax.axis(lims)
+  plot_buf = gen_plot(fig)
+  im = np.array(Image.open(plot_buf), dtype=np.uint8)
+  im = np.expand_dims(im, axis=0)
+  return im
+
+
+def gen_plot(fig):
+  """
+  Create a pyplot plot and save to buffer.
+  https://stackoverflow.com/a/38676842
+  """
+  buf = io.BytesIO()
+  fig.savefig(buf, format='png')
+  buf.seek(0)
+  return buf
