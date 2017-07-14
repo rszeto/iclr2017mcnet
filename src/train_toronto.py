@@ -29,7 +29,7 @@ def main(lr, batch_size, alpha, beta, image_size, K,
   video_tensor_path = '../data/MNIST/%s.npy' % dataset_label
   video_tensor = np.load(video_tensor_path, mmap_mode='r')
   # Load validation set tensor
-  video_tensor_path = '../data/MNIST/%s_tiny.npy' % dataset_label
+  video_tensor_path = '../data/MNIST/%s_val.npy' % dataset_label
   video_tensor_val = np.load(video_tensor_path, mmap_mode='r')
   updateD = True
   updateG = True

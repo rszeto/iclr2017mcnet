@@ -212,6 +212,7 @@ def plot_to_image(x, y, lims):
   plot_buf = gen_plot(fig)
   im = np.array(Image.open(plot_buf), dtype=np.uint8)
   im = np.expand_dims(im, axis=0)
+  plt.close(fig)
   return im
 
 
