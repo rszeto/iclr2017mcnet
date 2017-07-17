@@ -66,15 +66,16 @@ def main(prefix, image_size, K, T, gpu, target_scale, dataset_label):
 
       savedir = "../results/images/MNIST/%s/%s/%04d" % (dataset_label, prefix, i)
 
-      seq_batch = transform(video_tensor[:, i, :, :, np.newaxis, np.newaxis]) \
-        .transpose((3, 1, 2, 0, 4)) \
-        .astype("float32")
+      seq_batch = transform(
+        video_tensor[:, i, :, :, np.newaxis, np.newaxis],
+        target_scale=target_scale
+      ).transpose((3, 1, 2, 0, 4)).astype("float32")
 
       diff_batch = np.zeros((1, image_size, image_size,
                              K-1, 1), dtype="float32")
       for t in xrange(1,K):
-        prev = inverse_transform(seq_batch[0,:,:,t-1])
-        next = inverse_transform(seq_batch[0,:,:,t])
+        prev = inverse_transform(seq_batch[0,:,:,t-1], target_scale=target_scale)
+        next = inverse_transform(seq_batch[0,:,:,t], target_scale=target_scale)
         diff = next.astype("float32")-prev.astype("float32")
         diff_batch[0,:,:,t-1] = diff
 
@@ -93,8 +94,8 @@ def main(prefix, image_size, K, T, gpu, target_scale, dataset_label):
       pred_data = np.concatenate((seq_batch[:,:,:,:K], pred_data),axis=3)
       true_data = np.concatenate((seq_batch[:,:,:,:K], true_data),axis=3)
       for t in xrange(K+T):
-        pred = (inverse_transform(pred_data[0,:,:,t])*255).astype("uint8")
-        target = (inverse_transform(true_data[0,:,:,t])*255).astype("uint8")
+        pred = (inverse_transform(pred_data[0,:,:,t], target_scale=target_scale)*255).astype("uint8")
+        target = (inverse_transform(true_data[0,:,:,t], target_scale=target_scale)*255).astype("uint8")
 
         cpsnr[t] = measure.compare_psnr(pred,target)
         cssim[t] = ssim.compute_ssim(Image.fromarray(cv2.cvtColor(target,
