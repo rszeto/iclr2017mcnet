@@ -26,26 +26,29 @@ def main(lr, batch_size, alpha, beta, image_size, K,
          lp_p, gdl_a, target_scale,
          dataset_label):
   # Load video tensor (T x V x H x W)
-  video_tensor_path = '../data/MNIST/%s.npy' % dataset_label
+  video_tensor_path = '../data/MNIST/%s_videos.npy' % dataset_label
   video_tensor = np.load(video_tensor_path, mmap_mode='r')
   # Load validation set tensor
-  video_tensor_path = '../data/MNIST/%s_val.npy' % dataset_label
+  video_tensor_path = '../data/MNIST/%s_val_videos.npy' % dataset_label
   video_tensor_val = np.load(video_tensor_path, mmap_mode='r')
   updateD = True
   updateG = True
-  prefix  = ("%s_MCNET" % dataset_label
-          + "_image_size="+str(image_size)
-          + "_K="+str(K)
-          + "_T="+str(T)
-          + "_batch_size="+str(batch_size)
-          + "_alpha="+str(alpha)
-          + "_beta="+str(beta)
-          + "_lr="+str(lr)
-          + "_lp_p="+str(lp_p)
-          + "_gdl_a="+str(gdl_a)
-          + "_margin="+str(margin)
-          + "_always_update_dg="+str(always_update_dg)
-          + "_target_scale="+str(target_scale))
+  prefix = dataset_label
+  params_arr = [
+      "dataset="+dataset_label,
+      "image_size="+str(image_size),
+      "K="+str(K),
+      "T="+str(T),
+      "batch_size="+str(batch_size),
+      "alpha="+str(alpha),
+      "beta="+str(beta),
+      "lr="+str(lr),
+      "lp_p="+str(lp_p),
+      "gdl_a="+str(gdl_a),
+      "margin="+str(margin),
+      "always_update_dg="+str(always_update_dg),
+      "target_scale="+str(target_scale),
+  ]
 
   print("\n"+prefix+"\n")
   checkpoint_dir = "../models/"+prefix+"/"
@@ -58,6 +61,10 @@ def main(lr, batch_size, alpha, beta, image_size, K,
     makedirs(samples_dir)
   if not exists(summary_dir):
     makedirs(summary_dir)
+
+  with tf.device("/cpu:0"):
+    params = tf.convert_to_tensor(params_arr)
+    params_sum = tf.summary.text("params", params)
 
   with tf.device("/gpu:%d"%gpu[0]):
     model = MCNET(image_size=[image_size,image_size], c_dim=1,
@@ -118,6 +125,10 @@ def main(lr, batch_size, alpha, beta, image_size, K,
     update_sum = tf.summary.merge([updateD_sum, updateG_sum])
 
     writer = tf.summary.FileWriter(summary_dir, sess.graph)
+
+    # Print parameters to TensorBoard
+    params_sum_str = sess.run(params_sum)
+    writer.add_summary(params_sum_str, 0)
 
     counter = iters+1
     start_time = time.time()
@@ -281,6 +292,8 @@ def main(lr, batch_size, alpha, beta, image_size, K,
               model.save(sess, checkpoint_dir, counter-1)
 
             iters += 1
+            if iters >= num_iter:
+                break
 
 if __name__ == "__main__":
   parser = ArgumentParser()
@@ -291,7 +304,7 @@ if __name__ == "__main__":
   parser.add_argument("--alpha", type=float, dest="alpha",
                       default=1.0, help="Image loss weight")
   parser.add_argument("--beta", type=float, dest="beta",
-                      default=0.02, help="GAN loss weight")
+                      default=2e-5, help="GAN loss weight")
   parser.add_argument("--image_size", type=int, dest="image_size",
                       default=64, help="Image size")
   parser.add_argument("--K", type=int, dest="K",
@@ -317,7 +330,7 @@ if __name__ == "__main__":
   parser.add_argument("--target_scale", type=float, dest="target_scale",
                       default=0.75, help="How much to scale model targets")
   parser.add_argument("--dataset_label", type=str, dest="dataset_label", required=True,
-                      help="Name of the dataset (i.e. X in ../data/MNIST/X.npy)")
+                      help="Name of the dataset (i.e. X in ../data/MNIST/X_videos.npy)")
 
   args = parser.parse_args()
   main(**vars(args))
