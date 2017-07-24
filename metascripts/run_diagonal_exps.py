@@ -14,6 +14,7 @@ import numpy as np
 import traceback
 import subprocess
 import argparse
+from functools import partial
 
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -21,9 +22,9 @@ MNIST_DATA_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, '..', 'data', 'MNIST')
 TRAIN_TORONTO_PATH = os.path.abspath(os.path.join(SCRIPT_DIR, '..', 'src', 'train_toronto.py'))
 
 
-def launch_job(t):
+def launch_job(t, num_gpus):
     i, cmd = t
-    gpu_id = i % NUM_GPUS
+    gpu_id = i % num_gpus
 
     with FileLock('/tmp/gpu_%d.lck' % gpu_id):
 
@@ -59,13 +60,16 @@ def main(num_gpus):
 
     # Start the jobs
     pool = Pool(2 * num_gpus)
-    res = pool.map_async(launch_job, enumerate(cmds))
+    fn = partial(launch_job, num_gpus=num_gpus)
+    res = pool.map_async(fn, enumerate(cmds))
 
     try:
         # Set timeout to avoid hanging on interrupt
         res.get(9999999)
     except KeyboardInterrupt:
         pass
+    except Exception:
+        traceback.print_exc()
     finally:
         # Clear the lock files
         for i in range(num_gpus):
