@@ -13,7 +13,6 @@ from multiprocessing import Pool
 import numpy as np
 import traceback
 import subprocess
-from joblib import Parallel, delayed
 
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
