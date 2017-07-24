@@ -53,9 +53,9 @@ def launch_job(t):
 def main(num_gpus):
     video_file_paths = [path for path in glob.glob(MNIST_DATA_DIR + '/*_videos.npy') if '_val_' not in path]
 
-    cmd_fmt = 'python %s --dataset_label=%%s --K=5 --T=5 --num_iter=10' % TRAIN_TORONTO_PATH
+    cmd_fmt = 'python %s --dataset_label=%%s --K=5 --T=5' % TRAIN_TORONTO_PATH
     dataset_labels = [re.search('.*/(.*)_videos\.npy', path).group(1) for path in video_file_paths]
-    cmds = [cmd_fmt % dataset_label for dataset_label in dataset_labels][:6]
+    cmds = [cmd_fmt % dataset_label for dataset_label in dataset_labels][::-1]
 
     # Start the jobs
     pool = Pool(2 * num_gpus)
