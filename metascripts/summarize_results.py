@@ -3,6 +3,7 @@ import tensorflow as tf
 import os
 from collections import OrderedDict
 import re
+from multiprocessing import Pool
 
 SCRIPT_DIR = os.path.abspath(os.path.dirname(__file__))
 LOG_DIR = os.path.join(SCRIPT_DIR, '..', 'logs')
@@ -108,15 +109,16 @@ def main():
                 + ['L_val_best', 'psnr_auc_best', 'ssim_auc_best']
     header = ','.join(col_names)
 
-    with open('test.csv', 'w') as f:
+    pool = Pool()
+    with open('diagonal_experiments_summary.csv', 'w') as f:
         f.write('%s\n' % header)
         # Write the row for each experiment
-        for exp_name in os.listdir(LOG_DIR):
-            # Only evaluate newer diagonal experiments
-            if re.match('|'.join(CONFIG_PARAM_NAMES), exp_name):
-                exp_row = generate_exp_row(exp_name)
-                if exp_row is not None:
-                    f.write('%s\n' % exp_row)
+        exp_names = filter(lambda x: re.match('|'.join(CONFIG_PARAM_NAMES), x),
+                           os.listdir(LOG_DIR))
+        exp_rows = pool.map(generate_exp_row, exp_names)
+        exp_rows = filter(lambda x: x, exp_rows)
+        for exp_row in exp_rows:
+            f.write('%s\n' % exp_row)
 
 if __name__ == '__main__':
     main()
