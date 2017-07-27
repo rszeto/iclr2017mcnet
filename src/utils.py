@@ -13,6 +13,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import io
 from PIL import Image
+import os
 
 
 def transform(image, target_scale=1.0):
@@ -143,7 +144,7 @@ def load_kth_data(f_name, data_path, image_size, K, T):
 
 def load_s1m_data(f_name, data_path, trainlist, K, T):
   flip = np.random.binomial(1,.5,1)[0]
-  vid_path = data_path + f_name
+  vid_path = os.path.join(data_path, f_name)
   img_size = [240,320]
 
   while True:
@@ -178,7 +179,7 @@ def load_s1m_data(f_name, data_path, trainlist, K, T):
       # In case the current video is bad load a random one 
       rep_idx = np.random.randint(low=0, high=len(trainlist))
       f_name = trainlist[rep_idx]
-      vid_path = data_path + f_name
+      os.path.join(data_path, f_name)
 
   return seq, diff
 
