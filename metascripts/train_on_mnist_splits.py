@@ -1,5 +1,7 @@
 '''
-Run the video-only experiments where the training set is X and the test set is X_val
+Train multiple MCNets on multiple slices of Moving MNIST. This yields trained models that can be
+run on corresponding Moving MNIST validation slices (diagonal experiments) or on other validation
+slices (for generalization experiments).
 '''
 
 import os
@@ -51,15 +53,18 @@ def launch_job(t, num_gpus):
                     f.write(cmd + '\n')
 
 
-def main(num_gpus):
-    video_file_paths = [path for path in glob.glob(MNIST_DATA_DIR + '/*_videos.npy') if '_val_' not in path]
+def main(num_gpus, slice_names=None):
+    if slice_names is None:
+        video_file_paths = [path for path in glob.glob(MNIST_DATA_DIR + '/*_videos.npy') if '_val_' not in path]
+    else:
+        video_file_paths = [os.path.join(MNIST_DATA_DIR, '%s_videos.npy' % slice_name) for slice_name in slice_names]
 
     cmd_fmt = 'python %s --dataset_label=%%s --K=5 --T=5' % TRAIN_TORONTO_PATH
     dataset_labels = [re.search('.*/(.*)_videos\.npy', path).group(1) for path in video_file_paths]
     cmds = [cmd_fmt % dataset_label for dataset_label in dataset_labels][::-1]
 
-    # Start the jobs
-    pool = Pool(2 * num_gpus)
+    # Start the jobs (let up to four jobs wait for one GPU)
+    pool = Pool(4 * num_gpus)
     fn = partial(launch_job, num_gpus=num_gpus)
     res = pool.map_async(fn, enumerate(cmds))
 
@@ -79,5 +84,6 @@ def main(num_gpus):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('num_gpus', type=int, help='Number of GPUs on this machine')
+    parser.add_argument('--slice_names', type=str, nargs='+', help='List of MNIST slice names')
     args = parser.parse_args()
     main(**vars(args))
