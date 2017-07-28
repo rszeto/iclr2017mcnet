@@ -53,10 +53,12 @@ def launch_job(t, num_gpus):
                     f.write(cmd + '\n')
 
 
-def main(num_gpus, slice_names=None):
-    if slice_names is None:
+def main(num_gpus, slice_names_file=None):
+    if slice_names_file is None:
         video_file_paths = [path for path in glob.glob(MNIST_DATA_DIR + '/*_videos.npy') if '_val_' not in path]
     else:
+        with open(slice_names_file, 'r') as f:
+            slice_names = [line.strip() for line in f.readlines()]
         video_file_paths = [os.path.join(MNIST_DATA_DIR, '%s_videos.npy' % slice_name) for slice_name in slice_names]
 
     cmd_fmt = 'python %s --dataset_label=%%s --K=5 --T=5' % TRAIN_TORONTO_PATH
@@ -84,6 +86,6 @@ def main(num_gpus, slice_names=None):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('num_gpus', type=int, help='Number of GPUs on this machine')
-    parser.add_argument('--slice_names', type=str, nargs='+', help='List of MNIST slice names')
+    parser.add_argument('--slice_names_file', type=str, help='File path to list of MNIST slice names')
     args = parser.parse_args()
     main(**vars(args))
