@@ -117,7 +117,7 @@ def main():
                            os.listdir(LOG_DIR))
         exp_rows = pool.map(generate_exp_row, exp_names)
         exp_rows = filter(lambda x: x, exp_rows)
-        for exp_row in exp_rows:
+        for exp_row in sorted(exp_rows):
             f.write('%s\n' % exp_row)
 
 if __name__ == '__main__':
