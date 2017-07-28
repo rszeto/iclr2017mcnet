@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 import io
 from PIL import Image
 import os
+from warnings import warn
 
 
 def transform(image, target_scale=1.0):
@@ -176,10 +177,11 @@ def load_s1m_data(f_name, data_path, trainlist, K, T):
         diff[:,:,t-1,0] = (next.astype("float32")-prev.astype("float32"))/255.
       break
     except Exception:
-      # In case the current video is bad load a random one 
+      warn('Failed to find %s' % vid_path)
+      # In case the current video is bad load a random one
       rep_idx = np.random.randint(low=0, high=len(trainlist))
       f_name = trainlist[rep_idx]
-      os.path.join(data_path, f_name)
+      vid_path = os.path.join(data_path, f_name)
 
   return seq, diff
 
