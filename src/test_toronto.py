@@ -22,10 +22,7 @@ from PIL import ImageDraw
 
 
 def main(prefix, image_size, K, T, gpu, target_scale, dataset_label):
-  # data_path = "../data/KTH/"
-  # f = open(data_path+"test_data_list.txt","r")
-  # testfiles = f.readlines()
-  video_tensor_path = '../data/MNIST/%s.npy' % dataset_label
+  video_tensor_path = '../data/MNIST/%s_val_videos.npy' % dataset_label
   video_tensor = np.load(video_tensor_path, mmap_mode='r')
 
   c_dim = 1
@@ -36,7 +33,7 @@ def main(prefix, image_size, K, T, gpu, target_scale, dataset_label):
   with tf.device("/gpu:%d"%gpu[0]):
     model = MCNET(image_size=[image_size, image_size], batch_size=1, K=K,
                   T=T, c_dim=c_dim, checkpoint_dir=checkpoint_dir,
-                  is_train=False)
+                  is_train=False, target_scale=target_scale)
 
   gpu_options = tf.GPUOptions(allow_growth=True)
   with tf.Session(config=tf.ConfigProto(allow_soft_placement=True,
@@ -53,7 +50,7 @@ def main(prefix, image_size, K, T, gpu, target_scale, dataset_label):
       print(" [!] Load failed... exiting")
       return
 
-    quant_dir = "../results/quantitative/MNIST/%s/%s/" % (dataset_label, prefix)
+    quant_dir = "../results/quantitative/MNIST/data=%s/model=%s/" % (dataset_label, prefix)
     save_path = quant_dir+"results_model="+model_name+".npz"
     if not exists(quant_dir):
       makedirs(quant_dir)
@@ -64,7 +61,7 @@ def main(prefix, image_size, K, T, gpu, target_scale, dataset_label):
     for i in xrange(video_tensor.shape[1]):
       print("Video "+str(i)+"/"+str(video_tensor.shape[1]))
 
-      savedir = "../results/images/MNIST/%s/%s/%04d" % (dataset_label, prefix, i)
+      savedir = "../results/images/MNIST/data=%s/model=%s/%04d" % (dataset_label, prefix, i)
 
       seq_batch = transform(
         video_tensor[:, i, :, :, np.newaxis, np.newaxis],
@@ -148,7 +145,7 @@ if __name__ == "__main__":
   parser.add_argument("--gpu", type=int, nargs="+", dest="gpu",
                       default=[0], help="GPU device id")
   parser.add_argument("--dataset_label", type=str, dest="dataset_label", required=True,
-                      help="Name of the dataset (i.e. X in ../data/MNIST/X.npy)")
+                      help="Name of the dataset (i.e. X in ../data/MNIST/X_val_videos.npy)")
 
   args = parser.parse_args()
   main(**vars(args))
