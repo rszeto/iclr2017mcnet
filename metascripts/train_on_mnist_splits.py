@@ -77,10 +77,6 @@ def main(num_gpus, slice_names_file=None):
         pass
     except Exception:
         traceback.print_exc()
-    finally:
-        # Clear the lock files
-        for i in range(num_gpus):
-            os.remove('/tmp/gpu_%d.lck' % i)
 
 
 if __name__ == '__main__':
