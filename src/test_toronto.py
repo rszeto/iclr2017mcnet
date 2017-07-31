@@ -76,7 +76,7 @@ def main(prefix, image_size, K, T, gpu, target_scale, dataset_label):
         diff = next.astype("float32")-prev.astype("float32")
         diff_batch[0,:,:,t-1] = diff
 
-      true_data = seq_batch[:,:,:,K:,:].copy()
+      true_data = seq_batch[:,:,:,K:K+T,:].copy()
       pred_data = np.zeros(true_data.shape, dtype="float32")
       xt = seq_batch[:,:,:,K-1]
       pred_data[0] = sess.run(model.G,
