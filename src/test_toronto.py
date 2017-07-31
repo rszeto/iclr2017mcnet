@@ -91,7 +91,11 @@ def main(prefix, image_size, K, T, gpu, target_scale, dataset_label):
       pred_data = np.concatenate((seq_batch[:,:,:,:K], pred_data),axis=3)
       true_data = np.concatenate((seq_batch[:,:,:,:K], true_data),axis=3)
       for t in xrange(K+T):
-        pred = (inverse_transform(pred_data[0,:,:,t], target_scale=target_scale)*255).astype("uint8")
+        pred = inverse_transform(pred_data[0,:,:,t], target_scale=target_scale)
+        # Clip pred within [0, 1]
+        pred = 255 * np.minimum(np.maximum(pred, 0), 1)
+        # Convert pred to uint8
+        pred = pred.astype(np.uint8)
         target = (inverse_transform(true_data[0,:,:,t], target_scale=target_scale)*255).astype("uint8")
 
         cpsnr[t] = measure.compare_psnr(pred,target)
@@ -99,6 +103,7 @@ def main(prefix, image_size, K, T, gpu, target_scale, dataset_label):
                                                      cv2.COLOR_GRAY2BGR)),
                                      Image.fromarray(cv2.cvtColor(pred,
                                                      cv2.COLOR_GRAY2BGR)))
+
         pred = draw_frame(pred, t < K)
         target = draw_frame(target, t < K)
 
