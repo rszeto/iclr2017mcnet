@@ -12,7 +12,7 @@ def plot_graphs(result_paths):
     for filename in result_paths:
         # Parse the path to get dataset
         print(filename)
-        parse = re.search('(KTH|UCF101|MNIST.+?)/', filename)
+        parse = re.search('(KTH|UCF101|MNIST)/', filename)
         cur_test_set_label = parse.group(1)
         assert(test_set_label is None or test_set_label == cur_test_set_label)
         test_set_label = cur_test_set_label
@@ -30,9 +30,10 @@ def plot_graphs(result_paths):
     for filename in result_paths:
         results = np.load(filename)
         psnr = results['psnr'].mean(axis=0)
+        psnr_nauc = np.sum(psnr) / len(psnr)
         psnr_plot = np.inf * np.ones(len(x_range))
         psnr_plot[:len(psnr)] = psnr
-        plt.plot(x_range, psnr_plot, label=os.path.basename(filename))
+        plt.plot(x_range, psnr_plot, label=os.path.basename(filename) + ' (nAUC=%.05f)' % psnr_nauc)
     plt.xticks(x_range)
     ax1.set_ylabel('PSNR')
     ax1.grid(True)
@@ -51,9 +52,10 @@ def plot_graphs(result_paths):
     for filename in result_paths:
         results = np.load(filename)
         ssim = results['ssim'].mean(axis=0)
+        ssim_nauc = np.sum(ssim) / len(ssim)
         ssim_plot = np.inf * np.ones(len(x_range))
         ssim_plot[:len(ssim)] = ssim
-        ax2.plot(x_range, ssim_plot, label=os.path.basename(filename))
+        ax2.plot(x_range, ssim_plot, label=os.path.basename(filename) + ' (AUC=%.05f)' % ssim_nauc)
     plt.xticks(x_range)
     ax2.set_ylabel('SSIM')
     ax2.grid(True)
@@ -72,7 +74,7 @@ def main():
     # Get result paths
     result_paths = []
 
-    while True:
+    while len(result_paths) < 1:
         # Select file path (https://stackoverflow.com/a/3579625)
         Tk().withdraw()
         filename = askopenfilename(initialdir='../results/quantitative')
