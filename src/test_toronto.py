@@ -21,7 +21,7 @@ from PIL import Image
 from PIL import ImageDraw
 
 
-def main(prefix, image_size, K, T, gpu, target_scale, dataset_label):
+def main(prefix, image_size, K, T, E, gpu, target_scale, dataset_label):
   video_tensor_path = '../data/MNIST/%s_val_videos.npy' % dataset_label
   video_tensor = np.load(video_tensor_path, mmap_mode='r')
 
@@ -32,7 +32,7 @@ def main(prefix, image_size, K, T, gpu, target_scale, dataset_label):
 
   with tf.device("/gpu:%d"%gpu[0]):
     model = MCNET(image_size=[image_size, image_size], batch_size=1, K=K,
-                  T=T, c_dim=c_dim, checkpoint_dir=checkpoint_dir,
+                  T=T+E, c_dim=c_dim, checkpoint_dir=checkpoint_dir,
                   is_train=False, target_scale=target_scale)
 
   gpu_options = tf.GPUOptions(allow_growth=True)
@@ -77,7 +77,9 @@ def main(prefix, image_size, K, T, gpu, target_scale, dataset_label):
         diff_batch[0,:,:,t-1] = diff
 
       true_data = seq_batch[:,:,:,K:K+T,:].copy()
-      pred_data = np.zeros(true_data.shape, dtype="float32")
+      pred_data_shape = list(true_data.shape)
+      pred_data_shape[3] = T + E
+      pred_data = np.zeros(pred_data_shape, dtype="float32")
       xt = seq_batch[:,:,:,K-1]
       pred_data[0] = sess.run(model.G,
                               feed_dict={model.diff_in: diff_batch,
@@ -105,10 +107,29 @@ def main(prefix, image_size, K, T, gpu, target_scale, dataset_label):
                                                      cv2.COLOR_GRAY2BGR)))
 
         pred = draw_frame(pred, t < K)
-        target = draw_frame(target, t < K)
+        target = draw_frame(target, True)
+        both = merge(np.stack([target, pred], axis=0), [1, 2])
 
         cv2.imwrite(savedir+"/pred_"+"{0:04d}".format(t)+".png", pred)
         cv2.imwrite(savedir+"/gt_"+"{0:04d}".format(t)+".png", target)
+        cv2.imwrite(savedir+"/both_"+"{0:04d}".format(t)+".png", both)
+
+      # Now just draw the predicted frames from steps T to E
+      for t in xrange(K+T, K+T+E):
+        pred = inverse_transform(pred_data[0, :, :, t], target_scale=target_scale)
+        # Clip pred within [0, 1]
+        pred = 255 * np.minimum(np.maximum(pred, 0), 1)
+        # Convert pred to uint8
+        pred = pred.astype(np.uint8)
+        # Draw a blank target
+        target = np.zeros((pred.shape[0], pred.shape[1], 3), dtype=np.uint8)
+
+        pred = draw_frame(pred, t < K)
+        both = merge(np.stack([target, pred], axis=0), [1, 2])
+
+        cv2.imwrite(savedir + "/pred_" + "{0:04d}".format(t) + ".png", pred)
+        cv2.imwrite(savedir + "/gt_" + "{0:04d}".format(t) + ".png", target)
+        cv2.imwrite(savedir + "/both_" + "{0:04d}".format(t) + ".png", both)
 
       cmd1 = "rm "+savedir+"/pred.gif"
       cmd2 = ("ffmpeg -f image2 -framerate 7 -i "+savedir+
@@ -128,6 +149,17 @@ def main(prefix, image_size, K, T, gpu, target_scale, dataset_label):
       # Otherwise only the gifs will be kept
       system(cmd1); system(cmd2); system(cmd3);
 
+      cmd1 = "rm " + os.path.dirname(savedir) + "/both_%04d.gif" % i
+      cmd2 = ("ffmpeg -f image2 -framerate 7 -i " + savedir +
+              "/both_%04d.png " + os.path.dirname(savedir) + "/both_%04d.gif" % i)
+      cmd3 = "rm " + savedir + "/both*.png"
+
+      # Comment out "system(cmd3)" if you want to keep the output images
+      # Otherwise only the gifs will be kept
+      system(cmd1);
+      system(cmd2);
+      system(cmd3);
+
       psnr_err = np.concatenate((psnr_err, cpsnr[None,K:]), axis=0)
       ssim_err = np.concatenate((ssim_err, cssim[None,K:]), axis=0)
 
@@ -144,7 +176,9 @@ if __name__ == "__main__":
   parser.add_argument("--K", type=int, dest="K",
                       default=10, help="Number of input images")
   parser.add_argument("--T", type=int, dest="T",
-                      default=10, help="Number of steps into the future")
+                      default=10, help="Number of steps into the future to compare to ground truth")
+  parser.add_argument("--E", type=int, dest="E",
+                      default=0, help="Number of steps past T to generate frames for")
   parser.add_argument("--target_scale", type=float, dest="target_scale",
                       default=0.75, help="How much to scale model targets")
   parser.add_argument("--gpu", type=int, nargs="+", dest="gpu",
