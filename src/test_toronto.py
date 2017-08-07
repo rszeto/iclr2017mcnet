@@ -31,9 +31,18 @@ def main(prefix, image_size, K, T, E, gpu, target_scale, dataset_label):
   best_model = None # will pick last model
 
   with tf.device("/gpu:%d"%gpu[0]):
+    # Set up placeholder for discriminator
+    disc_data = tf.placeholder(tf.float32, shape=[1, image_size, image_size, K + T])
+
     model = MCNET(image_size=[image_size, image_size], batch_size=1, K=K,
                   T=T+E, c_dim=c_dim, checkpoint_dir=checkpoint_dir,
                   is_train=False, target_scale=target_scale)
+
+    # Add personal discriminator
+    with tf.variable_scope("DIS", reuse=False):
+      D__, _ = model.discriminator(disc_data)
+    # Recreate the saver so the vars for the personal discriminator are loaded
+    model.saver = tf.train.Saver()
 
   gpu_options = tf.GPUOptions(allow_growth=True)
   with tf.Session(config=tf.ConfigProto(allow_soft_placement=True,
@@ -58,6 +67,7 @@ def main(prefix, image_size, K, T, E, gpu, target_scale, dataset_label):
     vid_names = []
     psnr_err = np.zeros((0, T))
     ssim_err = np.zeros((0, T))
+    disc_output = np.zeros((video_tensor.shape[1], E))
     for i in xrange(video_tensor.shape[1]):
       print("Video "+str(i)+"/"+str(video_tensor.shape[1]))
 
@@ -92,6 +102,7 @@ def main(prefix, image_size, K, T, E, gpu, target_scale, dataset_label):
       cssim = np.zeros((K+T,))
       pred_data = np.concatenate((seq_batch[:,:,:,:K], pred_data),axis=3)
       true_data = np.concatenate((seq_batch[:,:,:,:K], true_data),axis=3)
+
       for t in xrange(K+T):
         pred = inverse_transform(pred_data[0,:,:,t], target_scale=target_scale)
         # Clip pred within [0, 1]
@@ -116,6 +127,12 @@ def main(prefix, image_size, K, T, E, gpu, target_scale, dataset_label):
 
       # Now just draw the predicted frames from steps T to E
       for t in xrange(K+T, K+T+E):
+        # Save discriminator score
+        d_out = sess.run(D__, feed_dict={
+          disc_data: inverse_transform(pred_data[:, :, :, t-K-T:t, 0], target_scale=target_scale)
+        })
+        disc_output[i, t-K-T] = d_out
+
         pred = inverse_transform(pred_data[0, :, :, t], target_scale=target_scale)
         # Clip pred within [0, 1]
         pred = 255 * np.minimum(np.maximum(pred, 0), 1)
@@ -156,14 +173,12 @@ def main(prefix, image_size, K, T, E, gpu, target_scale, dataset_label):
 
       # Comment out "system(cmd3)" if you want to keep the output images
       # Otherwise only the gifs will be kept
-      system(cmd1);
-      system(cmd2);
-      system(cmd3);
+      system(cmd1); system(cmd2); system(cmd3);
 
       psnr_err = np.concatenate((psnr_err, cpsnr[None,K:]), axis=0)
       ssim_err = np.concatenate((ssim_err, cssim[None,K:]), axis=0)
 
-    np.savez(save_path, psnr=psnr_err, ssim=ssim_err)
+    np.savez(save_path, psnr=psnr_err, ssim=ssim_err, disc_output=disc_output)
     print("Results saved to "+save_path)
   print("Done.")
 

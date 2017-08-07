@@ -67,7 +67,7 @@ def main(num_gpus, data_model_pairs_file):
         pairs_str = [line.strip() for line in f.readlines()]
     data_model_pairs = [(x.split()[0], x.split()[1]) for x in pairs_str if len(x) > 0]
 
-    cmd_fmt = 'python %s --prefix=%%s --dataset_label=%%s --K=5 --T=5' % TEST_TORONTO_PATH
+    cmd_fmt = 'python %s --prefix=%%s --dataset_label=%%s --K=10 --T=5' % TEST_TORONTO_PATH
     cmds = [cmd_fmt % pair for pair in data_model_pairs]
 
     # Start the jobs (let up to four jobs wait for one GPU)

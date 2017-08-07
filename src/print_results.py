@@ -12,7 +12,7 @@ def plot_graphs(result_paths):
     for filename in result_paths:
         # Parse the path to get dataset
         print(filename)
-        parse = re.search('(KTH|UCF101|MNIST)/', filename)
+        parse = re.search('(KTH|UCF101|MNIST|mnist_results)/', filename)
         cur_test_set_label = parse.group(1)
         assert(test_set_label is None or test_set_label == cur_test_set_label)
         test_set_label = cur_test_set_label
