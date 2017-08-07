@@ -9,6 +9,7 @@ import os
 def plot_graphs(result_paths):
     test_set_label = None
     x_range = None
+    disc_x_range = None
     for filename in result_paths:
         # Parse the path to get dataset
         print(filename)
@@ -24,9 +25,16 @@ def plot_graphs(result_paths):
         if x_range is None or len(x) > len(x_range):
             x_range = x
 
+        # Update disc_output range if it exists
+        if 'disc_output' in results.files:
+            disc_output = results['disc_output']
+            x = np.arange(disc_output.shape[1])+1
+            if disc_x_range is None or len(x) > len(disc_x_range):
+                disc_x_range = x
+
 
     # Draw PSNR plot
-    ax1 = plt.subplot(211)
+    ax1 = plt.subplot(211) if disc_x_range is None else plt.subplot(311)
     for filename in result_paths:
         results = np.load(filename)
         psnr = results['psnr'].mean(axis=0)
@@ -48,7 +56,7 @@ def plot_graphs(result_paths):
     plt.legend()
 
     # Draw SSIM plot
-    ax2 = plt.subplot(212)
+    ax2 = plt.subplot(212) if disc_x_range is None else plt.subplot(312)
     for filename in result_paths:
         results = np.load(filename)
         ssim = results['ssim'].mean(axis=0)
@@ -69,12 +77,29 @@ def plot_graphs(result_paths):
         plt.yticks(np.arange(0.4, 1.01, 0.1))
     plt.legend()
 
+    # Draw discriminator score plot if any outputs were found
+    if disc_x_range is not None:
+        ax3 = plt.subplot(313)
+        for filename in result_paths:
+            results = np.load(filename)
+            if 'disc_output' in results.files:
+                disc_output = results['disc_output'].mean(axis=0)
+                disc_plot = np.inf * np.ones(len(disc_x_range))
+                disc_plot[:len(disc_output)] = disc_output
+                ax3.plot(disc_x_range, disc_plot, label=os.path.basename(filename))
+        plt.xticks(disc_x_range)
+        ax3.set_ylabel('Discriminator score')
+        ax3.grid(True)
+        for line in ax3.get_xgridlines() + ax3.get_ygridlines():
+            line.set_linestyle('dotted')
+        plt.legend()
+
 
 def main():
     # Get result paths
     result_paths = []
 
-    while len(result_paths) < 1:
+    while len(result_paths) < 2:
         # Select file path (https://stackoverflow.com/a/3579625)
         Tk().withdraw()
         filename = askopenfilename(initialdir='../results/quantitative')
