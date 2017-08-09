@@ -24,18 +24,18 @@ def eval(prefix, image_size, K, T, E, gpu, target_scale, dataset_label,
          video_tensor, c_dim, checkpoint_dir, best_model):
   assert(K+T+E <= video_tensor.shape[0])
   with tf.device("/gpu:%d" % gpu[0]):
-    # # Set up placeholder for discriminator
-    # disc_data = tf.placeholder(tf.float32, shape=[1, image_size, image_size, K + T])
+    # Set up placeholder for discriminator
+    disc_data = tf.placeholder(tf.float32, shape=[1, image_size, image_size, K + T])
 
     model = MCNET(image_size=[image_size, image_size], batch_size=1, K=K,
                   T=T+E, c_dim=c_dim, checkpoint_dir=checkpoint_dir,
                   is_train=False, target_scale=target_scale)
 
-    # # Add personal discriminator
-    # with tf.variable_scope("DIS", reuse=False):
-    #   D__, _ = model.discriminator(disc_data)
-    # # Recreate the saver so the vars for the personal discriminator are loaded
-    # model.saver = tf.train.Saver()
+    # Add personal discriminator
+    with tf.variable_scope("DIS", reuse=False):
+      D__, _ = model.discriminator(disc_data)
+    # Recreate the saver so the vars for the personal discriminator are loaded
+    model.saver = tf.train.Saver()
 
   gpu_options = tf.GPUOptions(allow_growth=True)
   with tf.Session(config=tf.ConfigProto(allow_soft_placement=True,
@@ -60,7 +60,7 @@ def eval(prefix, image_size, K, T, E, gpu, target_scale, dataset_label,
     vid_names = []
     psnr_err = np.zeros((0, T+E))
     ssim_err = np.zeros((0, T+E))
-    # disc_output = np.zeros((video_tensor.shape[1], E))
+    disc_output = np.zeros((video_tensor.shape[1], E))
     for i in xrange(video_tensor.shape[1]):
       print("Video " + str(i) + "/" + str(video_tensor.shape[1]))
 
@@ -117,6 +117,13 @@ def eval(prefix, image_size, K, T, E, gpu, target_scale, dataset_label,
         cv2.imwrite(savedir + "/gt_" + "{0:04d}".format(t) + ".png", target)
         cv2.imwrite(savedir + "/both_" + "{0:04d}".format(t) + ".png", both)
 
+        if t > K+T:
+          # Save discriminator score
+          d_out = sess.run(D__, feed_dict={
+            disc_data: inverse_transform(pred_data[:, :, :, t-K-T:t, 0], target_scale=target_scale)
+          })
+          disc_output[i, t-K-T] = d_out
+
       cmd1 = "rm " + savedir + "/pred.gif"
       cmd2 = ("ffmpeg -f image2 -framerate 7 -i " + savedir +
               "/pred_%04d.png " + savedir + "/pred.gif")
@@ -153,8 +160,7 @@ def eval(prefix, image_size, K, T, E, gpu, target_scale, dataset_label,
       psnr_err = np.concatenate((psnr_err, cpsnr[None, K:]), axis=0)
       ssim_err = np.concatenate((ssim_err, cssim[None, K:]), axis=0)
 
-    # np.savez(save_path, psnr=psnr_err, ssim=ssim_err, disc_output=disc_output)
-    np.savez(save_path, psnr=psnr_err, ssim=ssim_err)
+    np.savez(save_path, psnr=psnr_err, ssim=ssim_err, disc_output=disc_output)
     print("Results saved to " + save_path)
 
 def main(prefix, image_size, K, T, E, gpu, target_scale, dataset_label):
