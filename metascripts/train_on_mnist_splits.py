@@ -70,6 +70,8 @@ def main(num_gpus, slice_names_file):
     else:
         with open(slice_names_file, 'r') as f:
             slice_names = [line.strip() for line in f.readlines()]
+        # Filter out empty lines or commented lines
+        slice_names = filter(lambda x: len(x) > 0 and not x.startswith('#'), slice_names)
         video_file_paths = [os.path.join(MNIST_DATA_DIR, '%s_videos.npy' % slice_name) for slice_name in slice_names]
 
     cmd_fmt = 'python %s --dataset_label=%%s --K=10 --T=5' % TRAIN_TORONTO_PATH

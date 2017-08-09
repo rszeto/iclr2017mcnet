@@ -65,6 +65,8 @@ def main(num_gpus, data_model_pairs_file):
 
     with open(data_model_pairs_file, 'r') as f:
         pairs_str = [line.strip() for line in f.readlines()]
+    # Remove commented pairs
+    pairs_str = filter(lambda x: not x.startswith('#'), pairs_str)
     data_model_pairs = [(x.split()[0], x.split()[1]) for x in pairs_str if len(x) > 0]
 
     cmd_fmt = 'python %s --prefix=%%s --dataset_label=%%s --K=10 --T=5 --E=500' % TEST_TORONTO_PATH
