@@ -19,7 +19,11 @@ from functools import partial
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 MNIST_DATA_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, '..', 'data', 'MNIST'))
-TEST_TORONTO_PATH = os.path.abspath(os.path.join(SCRIPT_DIR, '..', 'src', 'test_toronto.py'))
+
+TEST_SCRIPT_PATH_MAP = {
+    'mcnet': os.path.abspath(os.path.join(SCRIPT_DIR, '..', 'src', 'test_toronto.py')),
+    'mcnet_content_lstm': os.path.abspath(os.path.join(SCRIPT_DIR, '..', 'src', 'test_toronto_mcnet_content_lstm.py'))
+}
 
 def launch_job(t, num_gpus):
     i, cmd = t
@@ -61,7 +65,7 @@ def launch_job(t, num_gpus):
             gpu_id = gpu_id + 1 % num_gpus
 
 
-def main(num_gpus, data_model_pairs_file):
+def main(arch, num_gpus, data_model_pairs_file):
 
     with open(data_model_pairs_file, 'r') as f:
         pairs_str = [line.strip() for line in f.readlines()]
@@ -69,10 +73,15 @@ def main(num_gpus, data_model_pairs_file):
     pairs_str = filter(lambda x: not x.startswith('#'), pairs_str)
     data_model_pairs = [(x.split()[0], x.split()[1]) for x in pairs_str if len(x) > 0]
 
-    cmd_fmt = 'python %s --prefix=%%s --dataset_label=%%s --K=10 --T=5 --E=485' % TEST_TORONTO_PATH
+    test_script_path = TEST_SCRIPT_PATH_MAP.get(arch, None)
+    if test_script_path is None:
+        print('%s is not a valid architecture. Quitting' % arch)
+        return
+
+    cmd_fmt = 'python %s --prefix=%%s --dataset_label=%%s --K=10 --T=5 --E=485' % test_script_path
     cmds = [cmd_fmt % pair for pair in data_model_pairs]
 
-    # Start the jobs (let up to four jobs wait for one GPU)
+    # Start the jobs
     pool = Pool(num_gpus)
     fn = partial(launch_job, num_gpus=num_gpus)
     res = pool.map_async(fn, enumerate(cmds))
@@ -88,6 +97,7 @@ def main(num_gpus, data_model_pairs_file):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
+    parser.add_argument('arch', type=str, help='Label of the MCNet architecture to use')
     parser.add_argument('num_gpus', type=int, help='Number of GPUs on this machine')
     parser.add_argument('--pairs_file', type=str, dest='data_model_pairs_file',
                         default=os.path.join(SCRIPT_DIR, 'data_model_pairs.txt'),
