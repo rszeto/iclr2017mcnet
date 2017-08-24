@@ -19,6 +19,8 @@ import skimage.measure as measure
 import ssim
 from PIL import Image
 
+import threading
+
 
 def main(lr, batch_size, alpha, beta, image_size, K,
          T, num_iter, gpu, sample_freq, val_freq,
@@ -27,28 +29,90 @@ def main(lr, batch_size, alpha, beta, image_size, K,
          dataset_label):
   # Load video tensor (T x V x H x W)
   video_tensor_path = '../data/MNIST/%s_videos.npy' % dataset_label
-  video_tensor = np.load(video_tensor_path, mmap_mode='r')
+  video_tensor = np.load(video_tensor_path)
+  seq, diff = get_moving_mnist_tensors(video_tensor, image_size, K, T, target_scale)
   # Load validation set tensor
   video_tensor_path = '../data/MNIST/%s_val_videos.npy' % dataset_label
-  video_tensor_val = np.load(video_tensor_path, mmap_mode='r')
+  video_tensor_val = np.load(video_tensor_path)
+  seq_val, diff_val = get_moving_mnist_tensors(video_tensor_val, image_size, K, T, target_scale)
+
+  # Check that number of videos is divisible by batch size
+  assert(seq.shape[1] % batch_size == 0)
+  assert(seq_val.shape[1] % batch_size == 0)
+
+  # Data queues
+  blah_seq_input = tf.placeholder(tf.float32, shape=seq.shape[1:])
+  blah_diff_input = tf.placeholder(tf.float32, shape=diff.shape[1:])
+  blah_queue = tf.FIFOQueue(seq.shape[0], [tf.float32, tf.float32], shapes=[seq.shape[1:], diff.shape[1:]])
+  enqueue_blah_op = blah_queue.enqueue([blah_seq_input, blah_diff_input])
+  seq_input, diff_input = blah_queue.dequeue()
+  blah_queue_size = blah_queue.size()
+  # seq_batch, diff_batch = tf.train.shuffle_batch(dequeue_blah, batch_size=batch_size, capacity=10*batch_size, min_after_dequeue=2*batch_size)
+
+  train_queue = tf.RandomShuffleQueue(10 * batch_size,
+                                      2 * batch_size,
+                                      [tf.float32, tf.float32],
+                                      shapes=[seq.shape[1:], diff.shape[1:]])
+  enqueue_train_op = train_queue.enqueue([seq_input, diff_input])
+  # seq_batch, diff_batch = train_queue.dequeue_many(batch_size)
+  dequeue_train_op = train_queue.dequeue_many(batch_size)
+  # enqueue_train_op = train_queue.enqueue([seq_single_input, diff_single_input])
+
+  # # Data loading
+  # train_coord = tf.train.Coordinator()
+  # # blah_qr = tf.train.QueueRunner(blah_queue, [enqueue_blah_op] * 2)
+  # train_qr = tf.train.QueueRunner(train_queue, [enqueue_train_op] * 2)
+  # with tf.Session() as sess:
+  #   def load_blah_queue():
+  #     while True:
+  #       for i in xrange(seq.shape[0]):
+  #         sess.run(enqueue_blah_op, feed_dict={blah_seq_input: seq[i], blah_diff_input: diff[i]})
+  #
+  #   t = threading.Thread(target=load_blah_queue)
+  #   t.start()
+  #
+  #   # blah_threads = blah_qr.create_threads(sess, coord=train_coord, start=True)
+  #   enqueue_train_threads = train_qr.create_threads(sess, coord=train_coord, start=True)
+  #
+  #   for x in xrange(100):
+  #     print('===')
+  #     print(sess.run(blah_queue_size))
+  #     a, b = sess.run(dequeue_train_op)
+  #     print(a.shape)
+  #     print(b.shape)
+  #     print(sess.run(blah_queue_size))
+  #
+  #   train_coord.request_stop()
+  #   # train_coord.join(blah_threads)
+  #   train_coord.join(enqueue_train_threads)
+  #
+  # return
+
+  val_queue = tf.FIFOQueue(seq_val.shape[0],
+                           [tf.float32, tf.float32],
+                           shapes=[seq_val.shape[1:], diff_val.shape[1:]])
+  enqueue_val_op = val_queue.enqueue_many([seq_val, diff_val])
+  dequeue_val_op = val_queue.dequeue_many(batch_size)
+  val_queue_size = val_queue.size()
+
   updateD = True
   updateG = True
   prefix = dataset_label
   params_arr = [
-      "dataset="+dataset_label,
-      "image_size="+str(image_size),
-      "K="+str(K),
-      "T="+str(T),
-      "batch_size="+str(batch_size),
-      "alpha="+str(alpha),
-      "beta="+str(beta),
-      "lr="+str(lr),
-      "lp_p="+str(lp_p),
-      "gdl_a="+str(gdl_a),
-      "margin="+str(margin),
-      "always_update_dg="+str(always_update_dg),
-      "target_scale="+str(target_scale),
-  ]
+    "dataset="+dataset_label,
+    "image_size="+str(image_size),
+    "K="+str(K),
+    "T="+str(T),
+    "batch_size="+str(batch_size),
+    "alpha="+str(alpha),
+    "beta="+str(beta),
+    "lr="+str(lr),
+    "lp_p="+str(lp_p),
+    "gdl_a="+str(gdl_a),
+    "margin="+str(margin),
+    "always_update_dg="+str(always_update_dg),
+    "target_scale="+str(target_scale),
+    ]
 
   print("\n"+prefix+"\n")
   checkpoint_dir = "../models/"+prefix+"/"
@@ -70,13 +134,12 @@ def main(lr, batch_size, alpha, beta, image_size, K,
     model = MCNET(image_size=[image_size,image_size], c_dim=1,
                   K=K, batch_size=batch_size, T=T,
                   p=lp_p, alpha=gdl_a,
-                  checkpoint_dir=checkpoint_dir,
-                  target_scale=target_scale)
+                  checkpoint_dir=checkpoint_dir)
     d_optim = tf.train.AdamOptimizer(lr, beta1=0.5).minimize(
-        model.d_loss, var_list=model.d_vars
+      model.d_loss, var_list=model.d_vars
     )
     g_optim = tf.train.AdamOptimizer(lr, beta1=0.5).minimize(
-        alpha*model.L_img+beta*model.L_GAN, var_list=model.g_vars
+      alpha*model.L_img+beta*model.L_GAN, var_list=model.g_vars
     )
     L = alpha*model.L_img+beta*model.L_GAN
     L_sum = tf.summary.scalar("L", L)
@@ -102,11 +165,25 @@ def main(lr, batch_size, alpha, beta, image_size, K,
     ssim_plot_sum = tf.summary.image("ssim_val", ssim_plot, max_outputs=1)
 
   gpu_options = tf.GPUOptions(allow_growth=True)
+
+  # Data loading
+  train_coord = tf.train.Coordinator()
+  train_qr = tf.train.QueueRunner(train_queue, [enqueue_train_op] * 2)
+
   with tf.Session(config=tf.ConfigProto(allow_soft_placement=True,
-                  log_device_placement=False,
-                  gpu_options=gpu_options)) as sess:
+                                        log_device_placement=False,
+                                        gpu_options=gpu_options)) as sess:
+
+    def load_blah_queue():
+      while True:
+        for i in xrange(seq.shape[0]):
+          sess.run(enqueue_blah_op, feed_dict={blah_seq_input: seq[i], blah_diff_input: diff[i]})
+
+    t = threading.Thread(target=load_blah_queue)
+    t.start()
 
     tf.global_variables_initializer().run()
+    enqueue_train_threads = train_qr.create_threads(sess, coord=train_coord, start=True)
 
     load_result = model.load(sess, checkpoint_dir)
     if load_result:
@@ -138,31 +215,35 @@ def main(lr, batch_size, alpha, beta, image_size, K,
         mini_batches = get_minibatches_idx(video_tensor.shape[1], batch_size, shuffle=True)
         for _, batchidx in mini_batches:
           if len(batchidx) == batch_size:
-            seq_batch  = np.zeros((batch_size, image_size, image_size,
-                                   K+T, 1), dtype="float32")
-            diff_batch = np.zeros((batch_size, image_size, image_size,
-                                   K-1, 1), dtype="float32")
-            Ts = np.repeat(np.array([T]),batch_size,axis=0)
-            Ks = np.repeat(np.array([K]),batch_size,axis=0)
-            shapes = np.repeat(np.array([image_size]),batch_size,axis=0)
-            output = parallel(delayed(load_moving_mnist_data)(video_tensor, video_index, img_sze, k, t, target_scale)
-                                                 for video_index,img_sze,k,t in zip(batchidx, shapes, Ks, Ts))
-            for i in xrange(batch_size):
-              seq_batch[i] = output[i][0]
-              diff_batch[i] = output[i][1]
+            # seq_batch  = np.zeros((batch_size, image_size, image_size,
+            #                        K+T, 1), dtype="float32")
+            # diff_batch = np.zeros((batch_size, image_size, image_size,
+            #                        K-1, 1), dtype="float32")
+            # Ts = np.repeat(np.array([T]),batch_size,axis=0)
+            # Ks = np.repeat(np.array([K]),batch_size,axis=0)
+            # shapes = np.repeat(np.array([image_size]),batch_size,axis=0)
+            # output = parallel(delayed(load_moving_mnist_data)(video_tensor, video_index, img_sze, k, t, target_scale)
+            #                                      for video_index,img_sze,k,t in zip(batchidx, shapes, Ks, Ts))
+            # for i in xrange(batch_size):
+            #   seq_batch[i] = output[i][0]
+            #   diff_batch[i] = output[i][1]
+
+            # Get a training batch
+            seq_batch, diff_batch = sess.run(dequeue_train_op)
+            input_dict = {
+              model.diff_in: diff_batch,
+              model.xt: seq_batch[:,:,:,K-1],
+              model.target: seq_batch
+            }
 
             if updateD:
-              _, summary_str = sess.run([d_optim, d_sum],
-                                         feed_dict={model.diff_in: diff_batch,
-                                                    model.xt: seq_batch[:,:,:,K-1],
-                                                    model.target: seq_batch})
+              _, summary_str = sess.run([d_optim, g_sum], feed_dict=input_dict)
+              # _, summary_str = sess.run([d_optim, d_sum])
               writer.add_summary(summary_str, counter)
 
             if updateG:
-              _, summary_str = sess.run([g_optim, g_sum],
-                                         feed_dict={model.diff_in: diff_batch,
-                                                    model.xt: seq_batch[:,:,:,K-1],
-                                                    model.target: seq_batch})
+              _, summary_str = sess.run([g_optim, g_sum], feed_dict=input_dict)
+              # _, summary_str = sess.run([g_optim, g_sum])
               writer.add_summary(summary_str, counter)
 
             # Write discriminator/generator update graph
@@ -171,22 +252,14 @@ def main(lr, batch_size, alpha, beta, image_size, K,
                                               updateG_tf: updateG})
             writer.add_summary(summary_str, counter)
 
-            errD_fake = model.d_loss_fake.eval({model.diff_in: diff_batch,
-                                                model.xt: seq_batch[:,:,:,K-1],
-                                                model.target: seq_batch})
-            errD_real = model.d_loss_real.eval({model.diff_in: diff_batch,
-                                                model.xt: seq_batch[:,:,:,K-1],
-                                                model.target: seq_batch})
-            errG = model.L_GAN.eval({model.diff_in: diff_batch,
-                                     model.xt: seq_batch[:,:,:,K-1],
-                                     model.target: seq_batch})
-            err = L.eval({model.diff_in: diff_batch,
-                          model.xt: seq_batch[:,:,:,K-1],
-                          model.target: seq_batch})
+            errD_fake = model.d_loss_fake.eval(input_dict)
+            errD_real = model.d_loss_real.eval(input_dict)
+            errG = model.L_GAN.eval(input_dict)
+            err = L.eval(input_dict)
 
             print(
-                "Iters: [%2d] time: %4.4f, d_loss: %.8f, L_GAN: %.8f, L: %.8f, updateD: %r, updateG: %r"
-                % (iters, time.time() - start_time, errD_fake+errD_real, errG, err, updateD, updateG)
+              "Iters: [%2d] time: %4.4f, d_loss: %.8f, L_GAN: %.8f, L: %.8f, updateD: %r, updateG: %r"
+              % (iters, time.time() - start_time, errD_fake+errD_real, errG, err, updateD, updateG)
             )
 
             if not always_update_dg:
@@ -201,10 +274,7 @@ def main(lr, batch_size, alpha, beta, image_size, K,
             counter += 1
 
             if np.mod(counter, sample_freq) == 1:
-              samples = sess.run([model.G],
-                                  feed_dict={model.diff_in: diff_batch,
-                                             model.xt: seq_batch[:,:,:,K-1],
-                                             model.target: seq_batch})[0]
+              samples = sess.run([model.G], feed_dict=input_dict)[0]
               samples = samples[0].swapaxes(0,2).swapaxes(1,2)
               sbatch  = seq_batch[0,:,:,K:].swapaxes(0,2).swapaxes(1,2)
               samples = np.concatenate((samples,sbatch), axis=0)
@@ -215,31 +285,28 @@ def main(lr, batch_size, alpha, beta, image_size, K,
 
             if np.mod(counter, val_freq) == 1:
               print("Evaluating model on validation set...")
-              mini_batches_val = get_minibatches_idx(video_tensor_val.shape[1], batch_size)
               batch_samples_list = []
               batch_L_list = []
               batch_targets_list = []
-              # Forward pass over the whole validation set
-              for _, batchidx_val in mini_batches_val:
-                if len(batchidx_val) == batch_size:
-                  seq_batch_val  = np.zeros((batch_size, image_size, image_size,
-                                             K+T, 1), dtype="float32")
-                  diff_batch_val = np.zeros((batch_size, image_size, image_size,
-                                             K-1, 1), dtype="float32")
-                  output_val = parallel(delayed(load_moving_mnist_data)(video_tensor_val, video_index, image_size, K, T, target_scale)
-                                        for video_index in batchidx_val)
+              mini_batches_val = get_minibatches_idx(video_tensor_val.shape[1], batch_size)
 
-                  for i in xrange(batch_size):
-                    seq_batch_val[i] = output_val[i][0]
-                    diff_batch_val[i] = output_val[i][1]
+              # Enqueue all validation videos
+              sess.run(enqueue_val_op)
+              # Forward pass over the whole validation set
+              for batch_num, batchidx_val in mini_batches_val:
+                if len(batchidx_val) == batch_size:
+                  seq_batch_val, diff_batch_val = sess.run(dequeue_val_op)
 
                   batch_samples, batch_L = sess.run([model.G, L],
-                                                      feed_dict={model.diff_in: diff_batch_val,
-                                                                 model.xt: seq_batch_val[:,:,:,K-1],
-                                                                 model.target: seq_batch_val})
+                                                    feed_dict={model.diff_in: diff_batch_val,
+                                                               model.xt: seq_batch_val[:,:,:,K-1],
+                                                               model.target: seq_batch_val})
                   batch_samples_list.append(batch_samples)
                   batch_L_list.append(batch_L)
                   batch_targets_list.append(seq_batch_val[:,:,:,K:])
+
+              # Check that the validation queue was emptied
+              assert(sess.run(val_queue_size) == 0)
 
               L_val_np = np.mean(batch_L_list)
               # B x H x W x T x C
@@ -257,8 +324,8 @@ def main(lr, batch_size, alpha, beta, image_size, K,
                   sample_frame = np.minimum(np.maximum(sample_frame, 0), 255)
                   psnr_values[video_idx, frame_idx] = measure.compare_psnr(sample_frame, target_frame)
                   ssim_values[video_idx, frame_idx] = ssim.compute_ssim(
-                      Image.fromarray(cv2.cvtColor(target_frame, cv2.COLOR_GRAY2BGR)),
-                      Image.fromarray(cv2.cvtColor(sample_frame, cv2.COLOR_GRAY2BGR))
+                    Image.fromarray(cv2.cvtColor(target_frame, cv2.COLOR_GRAY2BGR)),
+                    Image.fromarray(cv2.cvtColor(sample_frame, cv2.COLOR_GRAY2BGR))
                   )
 
               # Generate plots and AUC of PSNR and SSIM averaged over all videos
@@ -293,7 +360,11 @@ def main(lr, batch_size, alpha, beta, image_size, K,
 
             iters += 1
             if iters >= num_iter:
-                break
+              break
+
+    train_coord.request_stop()
+    train_coord.join(enqueue_train_threads)
+
 
 if __name__ == "__main__":
   parser = ArgumentParser()

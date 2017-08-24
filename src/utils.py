@@ -200,6 +200,21 @@ def load_moving_mnist_data(video_tensor, video_index, image_size, K, T, target_s
   return seq, diff
 
 
+def get_moving_mnist_tensors(video_tensor, image_size, K, T, target_scale):
+  if image_size != video_tensor.shape[2] or image_size != video_tensor.shape[3]:
+    raise ValueError('Image size %d must match video dimensions %s' % (image_size, video_tensor.shape[2:]))
+
+  seq = transform(video_tensor[:K + T, :, :, :], target_scale)
+  seq = seq.transpose((1, 2, 3, 0))
+  diff = video_tensor[1:K].astype('float32') - video_tensor[:K-1].astype('float32')
+  diff = diff.transpose((1, 2, 3, 0)) / 255.0
+
+  return np.expand_dims(seq, -1), np.expand_dims(diff, -1)
+
+def load_moving_mnist_data_2(seq, diff, video_index):
+  return seq[video_index][:, :, :, np.newaxis], diff[video_index][:, :, :, np.newaxis]
+
+
 def plot_to_image(x, y, lims):
   '''
   Plot y vs. x and return the graph as a NumPy array
