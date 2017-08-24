@@ -21,7 +21,11 @@ from functools import partial
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 MNIST_DATA_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, '..', 'data', 'MNIST'))
-TRAIN_TORONTO_PATH = os.path.abspath(os.path.join(SCRIPT_DIR, '..', 'src', 'train_toronto.py'))
+
+TRAIN_SCRIPT_PATH_MAP = {
+    'mcnet': os.path.abspath(os.path.join(SCRIPT_DIR, '..', 'src', 'train_toronto.py')),
+    'mcnet_content_lstm': os.path.abspath(os.path.join(SCRIPT_DIR, '..', 'src', 'train_toronto_mcnet_content_lstm.py'))
+}
 
 
 def launch_job(t, num_gpus):
@@ -64,7 +68,7 @@ def launch_job(t, num_gpus):
             gpu_id = gpu_id + 1 % num_gpus
 
 
-def main(num_gpus, slice_names_file):
+def main(arch, num_gpus, slice_names_file):
     if slice_names_file is None:
         video_file_paths = [path for path in glob.glob(MNIST_DATA_DIR + '/*_videos.npy') if '_val_' not in path]
     else:
@@ -74,7 +78,12 @@ def main(num_gpus, slice_names_file):
         slice_names = filter(lambda x: len(x) > 0 and not x.startswith('#'), slice_names)
         video_file_paths = [os.path.join(MNIST_DATA_DIR, '%s_videos.npy' % slice_name) for slice_name in slice_names]
 
-    cmd_fmt = 'python %s --dataset_label=%%s --K=10 --T=5' % TRAIN_TORONTO_PATH
+    train_script_path = TRAIN_SCRIPT_PATH_MAP.get(arch, None)
+    if train_script_path is None:
+        print('%s is not a valid architecture. Quitting' % arch)
+        return
+
+    cmd_fmt = 'python %s --dataset_label=%%s --K=10 --T=5' % train_script_path
     dataset_labels = [re.search('.*/(.*)_videos\.npy', path).group(1) for path in video_file_paths]
     cmds = [cmd_fmt % dataset_label for dataset_label in dataset_labels][::-1]
 
@@ -94,6 +103,7 @@ def main(num_gpus, slice_names_file):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
+    parser.add_argument('arch', type=str, help='Label of the MCNet architecture to use')
     parser.add_argument('num_gpus', type=int, help='Number of GPUs on this machine')
     parser.add_argument('--slice_names_file', type=str,
                         default=os.path.join(SCRIPT_DIR, 'slice_names.txt'),
