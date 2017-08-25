@@ -22,7 +22,8 @@ MNIST_DATA_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, '..', 'data', 'MNIST')
 
 TEST_SCRIPT_PATH_MAP = {
     'mcnet': os.path.abspath(os.path.join(SCRIPT_DIR, '..', 'src', 'test_toronto.py')),
-    'mcnet_content_lstm': os.path.abspath(os.path.join(SCRIPT_DIR, '..', 'src', 'test_toronto_mcnet_content_lstm.py'))
+    'mcnet_content_lstm': os.path.abspath(os.path.join(SCRIPT_DIR, '..', 'src', 'test_toronto_mcnet_content_lstm.py')),
+    'mcnet_gt_identity': os.path.abspath(os.path.join(SCRIPT_DIR, '..', 'src', 'test_toronto_mcnet_gt_identity.py'))
 }
 
 def launch_job(t, num_gpus):
@@ -99,8 +100,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('arch', type=str, help='Label of the MCNet architecture to use')
     parser.add_argument('num_gpus', type=int, help='Number of GPUs on this machine')
-    parser.add_argument('--pairs_file', type=str, dest='data_model_pairs_file',
-                        default=os.path.join(SCRIPT_DIR, 'data_model_pairs.txt'),
+    parser.add_argument('pairs_file', type=str, dest='data_model_pairs_file',
                         help='File path to list of data-model pairs to evaluate')
     args = parser.parse_args()
     main(**vars(args))
