@@ -24,7 +24,8 @@ MNIST_DATA_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, '..', 'data', 'MNIST')
 
 TRAIN_SCRIPT_PATH_MAP = {
     'mcnet': os.path.abspath(os.path.join(SCRIPT_DIR, '..', 'src', 'train_toronto.py')),
-    'mcnet_content_lstm': os.path.abspath(os.path.join(SCRIPT_DIR, '..', 'src', 'train_toronto_mcnet_content_lstm.py'))
+    'mcnet_content_lstm': os.path.abspath(os.path.join(SCRIPT_DIR, '..', 'src', 'train_toronto_mcnet_content_lstm.py')),
+    'mcnet_gt_identity': os.path.abspath(os.path.join(SCRIPT_DIR, '..', 'src', 'train_toronto_mcnet_gt_identity.py'))
 }
 
 
@@ -105,8 +106,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('arch', type=str, help='Label of the MCNet architecture to use')
     parser.add_argument('num_gpus', type=int, help='Number of GPUs on this machine')
-    parser.add_argument('--slice_names_file', type=str,
-                        default=os.path.join(SCRIPT_DIR, 'slice_names.txt'),
+    parser.add_argument('slice_names_file', type=str,
                         help='File path to list of MNIST slice names')
     args = parser.parse_args()
     main(**vars(args))
