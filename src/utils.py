@@ -215,6 +215,10 @@ def load_moving_mnist_data_2(seq, diff, video_index):
   return seq[video_index][:, :, :, np.newaxis], diff[video_index][:, :, :, np.newaxis]
 
 
+def get_normalized_identities(identities, target_scale):
+  return np.expand_dims(transform(identities, target_scale), -1)
+
+
 def plot_to_image(x, y, lims):
   '''
   Plot y vs. x and return the graph as a NumPy array
