@@ -100,7 +100,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('arch', type=str, help='Label of the MCNet architecture to use')
     parser.add_argument('num_gpus', type=int, help='Number of GPUs on this machine')
-    parser.add_argument('pairs_file', type=str, dest='data_model_pairs_file',
+    parser.add_argument('data_model_pairs_file', type=str,
                         help='File path to list of data-model pairs to evaluate')
     args = parser.parse_args()
     main(**vars(args))
