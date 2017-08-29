@@ -23,7 +23,8 @@ MNIST_DATA_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, '..', 'data', 'MNIST')
 TEST_SCRIPT_PATH_MAP = {
     'mcnet': os.path.abspath(os.path.join(SCRIPT_DIR, '..', 'src', 'test_toronto.py')),
     'mcnet_content_lstm': os.path.abspath(os.path.join(SCRIPT_DIR, '..', 'src', 'test_toronto_mcnet_content_lstm.py')),
-    'mcnet_gt_identity': os.path.abspath(os.path.join(SCRIPT_DIR, '..', 'src', 'test_toronto_mcnet_gt_identity.py'))
+    'mcnet_gt_identity': os.path.abspath(os.path.join(SCRIPT_DIR, '..', 'src', 'test_toronto_mcnet_gt_identity.py')),
+    'mcnet_no_res': os.path.abspath(os.path.join(SCRIPT_DIR, '..', 'src', 'test_toronto_mcnet_no_res.py'))
 }
 
 def launch_job(t, num_gpus):
